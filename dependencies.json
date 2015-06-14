@@ -1,0 +1,10 @@
+{
+  "production": {
+    "Sequences": "http://github.com/jkroso/Sequences.jl/tarball/d86d426",
+    "Electron": "http://github.com/jkroso/Electron.jl/tarball/fcd18c4",
+    "write-json": "http://github.com/jkroso/write-json/tarball/3e6359a",
+    "parse-json": "http://github.com/jkroso/parse-json/tarball/81ad4f8",
+    "Promises": "http://github.com/jkroso/Promises.jl/tarball/e2bb347",
+    "Patchwork": "http://github.com/shashi/Patchwork.jl/tarball/a4603f8"
+  }
+}
