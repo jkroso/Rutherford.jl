@@ -1,9 +1,6 @@
-@require "parse-json" parse => parseJSON
-@require "write-json" json => toJSON
-@require "Sequences" Stream rest
-@require "Promises" Result
 import Patchwork: Elem, diff, jsonfmt
 import Electron
+import JSON
 
 assoc(key, value, d::Dict) = begin
   d = copy(d)
@@ -11,21 +8,24 @@ assoc(key, value, d::Dict) = begin
   d
 end
 
-function rutherford(guiˢ, options)
+function rutherford(guiˢ::Task, options::Associative)
   port,server = listenany(3000)
   proc = start_electron(assoc(:query, [:port => port], options))
   sock = accept(server)
 
-  # Send over initial rendering
-  write(sock, guiˢ |> first |> jsonfmt |> toJSON, '\n')
-
   @schedule try
+    gui = consume(guiˢ)
+
+    # Send over initial rendering
+    write(sock, gui |> jsonfmt |> JSON.json, '\n')
+
     # Write patches
-    reduce(guiˢ) do a, b
-      patch = diff(a, b) |> jsonfmt |> toJSON
+    for nextGUI in guiˢ
+      patch = diff(gui, nextGUI) |> jsonfmt |> JSON.json
       write(sock, patch, '\n')
-      b
+      gui = nextGUI
     end
+
     # End of stream means end of UI
     kill(proc)
     close(server)
@@ -33,17 +33,9 @@ function rutherford(guiˢ, options)
     showerror(STDERR, e)
   end
 
-  # Read a stream of events from the GUI and write them to
-  # the event stream
-  eventˢ = Result{Stream}()
-  @schedule try
-    for line in eachline(sock)
-      tail = Result{Stream}()
-      write(eventˢ, Stream(parseJSON(line), tail))
-      eventˢ = tail
-    end
-  catch e
-    showerror(STDERR, e)
+  # Produce a series of events
+  eventˢ = @task for line in eachline(sock)
+    produce(JSON.parse(line))
   end
 
   return eventˢ,proc
@@ -51,7 +43,7 @@ end
 
 function start_electron(params)
   stdin,process = open(`$(Electron.path) app`, "w")
-  write(stdin, toJSON(params), '\n')
+  write(stdin, JSON.json(params), '\n')
   close(stdin)
   process
 end
