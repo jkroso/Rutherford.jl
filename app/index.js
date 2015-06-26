@@ -1,8 +1,13 @@
+var querystring = require('querystring')
 var readline = require('readline')
 var net = require('net')
 
-var port = Number(location.search.slice(6))
-var sock = net.connect(port)
+var query = querystring.parse(location.search.slice(1))
+
+// Patchwork exports a global
+require(query.PWPath)
+
+var sock = net.connect(Number(query.port))
 
 var node
 

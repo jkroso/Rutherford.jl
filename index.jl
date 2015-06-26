@@ -2,6 +2,8 @@ import Patchwork: Elem, diff, jsonfmt
 import Electron
 import JSON
 
+const PWPath = Pkg.dir("Patchwork", "runtime")
+
 assoc(key, value, d::Dict) = begin
   d = copy(d)
   d[key] = value
@@ -10,7 +12,7 @@ end
 
 function rutherford(guiˢ::Task, options::Associative)
   port,server = listenany(3000)
-  proc = start_electron(assoc(:query, [:port => port], options))
+  proc = start_electron(assoc(:query, [:port => port, :PWPath => PWPath], options))
   sock = accept(server)
 
   renderer = @schedule try
