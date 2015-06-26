@@ -13,7 +13,7 @@ function rutherford(guiˢ::Task, options::Associative)
   proc = start_electron(assoc(:query, [:port => port], options))
   sock = accept(server)
 
-  @schedule try
+  renderer = @schedule try
     gui = consume(guiˢ)
 
     # Send over initial rendering
@@ -25,12 +25,9 @@ function rutherford(guiˢ::Task, options::Associative)
       write(sock, patch, '\n')
       gui = nextGUI
     end
-
-    # End of stream means end of UI
+  finally
     kill(proc)
     close(server)
-  catch e
-    showerror(STDERR, e)
   end
 
   # Produce a series of events
@@ -38,7 +35,7 @@ function rutherford(guiˢ::Task, options::Associative)
     produce(JSON.parse(line))
   end
 
-  return eventˢ,proc
+  return eventˢ,renderer
 end
 
 function start_electron(params)

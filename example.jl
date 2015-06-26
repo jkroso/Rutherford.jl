@@ -18,6 +18,7 @@ guiˢ = @task begin
   end
 end
 
-eventˢ,proc = rutherford(guiˢ, options)
+eventˢ,renderer = rutherford(guiˢ, options)
 
-wait(proc)
+# Wait on render task so errors are shown
+wait(renderer)
