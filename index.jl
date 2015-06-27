@@ -10,19 +10,19 @@ assoc(key, value, d::Dict) = begin
   d
 end
 
-function rutherford(guiˢ::Task, options::Associative)
+function rutherford(guiᵗ::Task, options::Associative)
   port,server = listenany(3000)
   proc = start_electron(assoc(:query, [:port => port, :PWPath => PWPath], options))
   sock = accept(server)
 
   renderer = @schedule try
-    gui = consume(guiˢ)
+    gui = consume(guiᵗ)
 
     # Send over initial rendering
     write(sock, gui |> jsonfmt |> JSON.json, '\n')
 
     # Write patches
-    for nextGUI in guiˢ
+    for nextGUI in guiᵗ
       patch = diff(gui, nextGUI) |> jsonfmt |> JSON.json
       write(sock, patch, '\n')
       gui = nextGUI
@@ -33,11 +33,11 @@ function rutherford(guiˢ::Task, options::Associative)
   end
 
   # Produce a series of events
-  eventˢ = @task for line in eachline(sock)
+  eventᵗ = @task for line in eachline(sock)
     produce(JSON.parse(line))
   end
 
-  return eventˢ,renderer
+  return eventᵗ,renderer
 end
 
 function start_electron(params)
