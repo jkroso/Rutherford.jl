@@ -2,23 +2,23 @@
 # This example just renders the most resent user event type as
 # a string. It demonstrates the round trip latency of the system
 #
-import Rutherford: rutherford
-import Patchwork: Elem
+@require "github.com/jkroso/DOM.jl/stylesheet" global_sheet @css_str
+@require "github.com/jkroso/DOM.jl" @dom
+@require "." App Window
 
-guiˢ = @task begin
-  produce(Elem(:p, "Loading"))
-  for event in eventˢ
-    produce(Elem(:p, event["type"]))
-  end
+app = App("Rutherford Example")
+
+window = Window(app, Dict(:width => 1200,
+                          :height => 700,
+                          :titleBarStyle => :hidden))
+
+put!(window.ui, @dom [:html [:head global_sheet] [:body [:p "Loading"]]])
+
+for e in window.events
+  put!(window.ui, @dom [:html
+    [:head global_sheet]
+    [:body [:pre class=css"text-align: center" repr(e)]]
+  ])
 end
 
-eventˢ,renderer = rutherford(guiˢ, [
-  :width => 1200,
-  :height => 700,
-  :frame => true,
-  :console => true,
-  :title => "Rutherford Example"
-])
-
-# Wait on render task so errors are shown
-wait(renderer)
+wait(app) # keeps the process open
