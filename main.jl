@@ -63,3 +63,4 @@ end
 
 Base.wait(w::Window) = wait(w.renderLoop)
 Base.wait(a::App) = wait(a.proc)
+Base.put!(w::Window, n) = put!(w.ui, n)

@@ -20,10 +20,10 @@ class = css"""
 
 const head = @dom [:head global_sheet reset]
 
-put!(window.ui, @dom [:html head [:body class=class [:pre "Loading"]]])
+put!(window, @dom [:html head [:body class=class [:pre "Loading"]]])
 
 for e in window.events
-  put!(window.ui, @dom [:html head [:body class=class [:pre repr(e)]]])
+  put!(window, @dom [:html head [:body class=class [:pre repr(e)]]])
 end
 
 wait(app) # keeps the process open
