@@ -57,6 +57,7 @@ Window(a::App, params::Associative) = begin
     produce(Events.parse_event(line))
   end
 
+  sleep(0) # allow tasks to get started
   Window(ui_port, output, renderLoop)
 end
 
