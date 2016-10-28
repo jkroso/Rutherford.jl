@@ -34,15 +34,13 @@ Window(a::App, params::Associative) = begin
   sock = accept(server)
 
   window.renderLoop = @schedule try
-    window.currentUI = take!(window.ui)
-
     # Send over initial rendering
+    window.currentUI = take!(window.ui)
     show(sock, json_mime, window.currentUI)
     write(sock, '\n')
 
     # Write patches
-    while isopen(window.ui)
-      nextGUI = take!(window.ui)
+    for nextGUI in window.ui
       patch = diff(window.currentUI, nextGUI)
       isnull(patch) && continue
       show(sock, json_mime, patch)
