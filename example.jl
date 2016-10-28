@@ -12,7 +12,7 @@ window = Window(app, Dict(:width => 1200,
                           :height => 700,
                           :titleBarStyle => :hidden))
 
-class = css"""
+center_content = css"""
   display: flex
   justify-content: space-around
   align-items: center
@@ -20,10 +20,10 @@ class = css"""
 
 const head = @dom [:head global_sheet reset]
 
-put!(window, @dom [:html head [:body class=class [:pre "Loading"]]])
+put!(window, @dom [:html head [:body class=center_content [:pre "Loading"]]])
 
 for e in window.events
-  put!(window, @dom [:html head [:body class=class [:pre repr(e)]]])
+  put!(window, @dom [:html head [:body class=center_content [:pre repr(e)]]])
 end
 
 wait(app) # keeps the process open
