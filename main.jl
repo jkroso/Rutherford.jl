@@ -55,7 +55,9 @@ Window(a::App, params::Associative) = begin
 
   # Produce a series of events
   window.events = @task for line in eachline(sock)
-    produce(Events.parse_event(line))
+    e = Events.parse_event(line)
+    dispatch(window, e)
+    produce(e)
   end
 
   sleep(0) # allow tasks to get started
