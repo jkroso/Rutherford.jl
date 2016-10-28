@@ -2,8 +2,7 @@
 # This example just renders the most resent user event type as
 # a string. It demonstrates the round trip latency of the system
 #
-@require "github.com/jkroso/DOM.jl/stylesheet" global_sheet reset @css_str
-@require "github.com/jkroso/DOM.jl" @dom
+@require "github.com/jkroso/DOM.jl" exports...
 @require "." App Window
 
 app = App("Rutherford Example")
@@ -18,7 +17,7 @@ center_content = css"""
   align-items: center
 """
 
-const head = @dom [:head global_sheet reset]
+const head = @dom [:head stylesheets...]
 
 put!(window, @dom [:html head [:body class=center_content [:pre "Loading"]]])
 
