@@ -57,7 +57,7 @@ const dom_path = (dom) => {
 }
 
 const indexOf = (dom) => {
-  var i = 0
+  var i = 1 // julia indexes from 1
   while (dom.previousSibling) {
     dom = dom.previousSibling
     i += 1
