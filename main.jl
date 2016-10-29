@@ -1,4 +1,5 @@
 @require "github.com/jkroso/DOM.jl" diff runtime Events dispatch Node
+@require "/Users/jkroso/Projects/JuliaLang/Cursor.jl" TopLevelCursor
 @require "github.com/jkroso/Electron.jl" install
 @require "github.com/jkroso/write-json.jl"
 @require "github.com/jkroso/parse-json.jl"
@@ -16,12 +17,12 @@ type Window
 end
 
 type App
-  title::AbstractString
+  title::String
   stdin::IO
   proc::Base.Process
 end
 
-App(title; version=v"1.4.4") = App(title, open( `$(install(version)) $app_path`, "w")...)
+App(title; version=v"1.4.4") = App(title, open(`$(install(version)) $app_path`, "w")...)
 
 Window(a::App, params::Associative) = begin
   window = Window()
@@ -67,3 +68,18 @@ Base.wait(a::App) = wait(a.proc)
 Base.put!(w::Window, n) = put!(w.ui, n)
 
 dispatch(w::Window, e::Events.Event) = dispatch(w.currentUI, e)
+
+"""
+Starts a rendering loop where the return value of each iteration becomes the
+UI of the window. It wraps your data in a `Cursor` which enables you to treat
+immutable data almost as if it was mutable.
+"""
+loop(render::Function, w::Window, initial_data) = begin
+  c = TopLevelCursor(initial_data, Port())
+  @schedule for cursor in c.port
+    put!(w, render(cursor))
+  end
+  # let loop start before puting
+  @schedule put!(c.port, c)
+  c.port
+end
