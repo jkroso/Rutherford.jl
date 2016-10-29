@@ -1,5 +1,5 @@
 @require "github.com/jkroso/DOM.jl" diff runtime Events dispatch Node
-@require "/Users/jkroso/Projects/JuliaLang/Cursor.jl" TopLevelCursor
+@require "github.com/jkroso/Cursor.jl" TopLevelCursor
 @require "github.com/jkroso/Electron.jl" install
 @require "github.com/jkroso/write-json.jl"
 @require "github.com/jkroso/parse-json.jl"
@@ -10,10 +10,11 @@ const app_path = joinpath(@dirname(), "app")
 
 type Window
   ui::Port
-  events::Task
+  events::Port
+  ready::Condition
   renderLoop::Task
   currentUI::Node
-  Window() = new(Port())
+  Window() = new(Port(), Port(), Condition())
 end
 
 type App
@@ -39,6 +40,7 @@ Window(a::App, params::Associative) = begin
     window.currentUI = take!(window.ui)
     show(sock, json_mime, window.currentUI)
     write(sock, '\n')
+    notify(window.ready)
 
     # Write patches
     for nextGUI in window.ui
@@ -52,14 +54,19 @@ Window(a::App, params::Associative) = begin
     close(server)
   end
 
+
   # Produce a series of events
-  window.events = @task for line in eachline(sock)
-    e = Events.parse_event(line)
-    dispatch(window, e)
-    produce(e)
+  @schedule begin
+    wait(window.ready)
+    for line in eachline(sock)
+      e = Events.parse_event(line)
+      dispatch(window, e)
+      put!(window.events, e)
+    end
   end
 
-  sleep(0) # allow tasks to get started
+  # allow renderLoop to subscribe to UI's so it doesn't miss any
+  sleep(0)
   return window
 end
 
@@ -76,10 +83,10 @@ immutable data almost as if it was mutable.
 """
 loop(render::Function, w::Window, initial_data) = begin
   c = TopLevelCursor(initial_data, Port())
-  @schedule for cursor in c.port
+  l = @schedule for cursor in c.port
     put!(w, render(cursor))
   end
-  # let loop start before puting
-  @schedule put!(c.port, c)
-  c.port
+  sleep(0) # let loop start before puting
+  put!(c.port, c)
+  return l
 end
