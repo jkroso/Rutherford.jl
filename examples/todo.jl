@@ -5,7 +5,7 @@
 @require "github.com/jkroso/Prospects.jl" need unshift
 @require "github.com/jkroso/Cursor.jl" Cursor assoc_in!
 @require "github.com/jkroso/DOM.jl" Node Container exports...
-@require "github.com/jkroso/DOM.jl/stdlib" exports...
+@require "../stdlib" exports...
 @require ".." App Window
 
 immutable Item
@@ -19,7 +19,7 @@ Base.convert(::Type{Node}, x::Cursor{Item}) =
              display: flex
              align-items: center
              padding: 10px
-             border-top: 1px solid grey
+             border-top: 1px solid rgb(180,180,180)
              &:first-child
                border-top: none
              input
