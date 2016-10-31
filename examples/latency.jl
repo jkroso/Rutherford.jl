@@ -6,16 +6,15 @@
 @require "github.com/jkroso/DOM.jl" Container exports...
 @require ".." App Window
 
-center_content = css"""
-  display: flex
-  justify-content: space-around
-  align-items: center
-"""
-
 Base.convert(::Type{Container{:html}}, c::Cursor) =
   @dom [:html
     [:head stylesheets...]
-    [:body class=center_content [:pre repr(need(c))]]]
+    [:body class=css"""
+                 display: flex
+                 justify-content: space-around
+                 align-items: center
+                 """
+      [:pre repr(need(c))]]]
 
 const app = App("Rutherford Example")
 
