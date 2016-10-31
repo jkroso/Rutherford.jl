@@ -67,3 +67,5 @@ Base.wait(w::Window) = wait(w.renderLoop)
 Base.wait(a::App) = wait(a.proc)
 
 dispatch(w::Window, e::Events.Event) = dispatch(w.currentUI, e)
+
+export App, Window
