@@ -1,20 +1,20 @@
-@require "github.com/jkroso/DOM.jl" diff runtime Events dispatch Node
-@require "github.com/jkroso/Cursor.jl" TopLevelCursor
+@require "github.com/jkroso/DOM.jl" diff runtime Events dispatch Node Container
 @require "github.com/jkroso/Electron.jl" install
+@require "github.com/jkroso/Cursor.jl" Cursor
 @require "github.com/jkroso/write-json.jl"
 @require "github.com/jkroso/parse-json.jl"
 @require "github.com/jkroso/Port.jl" Port
 
-const json_mime = MIME("application/json")
 const app_path = joinpath(@dirname(), "app")
+const json_mime = MIME("application/json")
 
 type Window
-  ui::Port
-  events::Port
   ready::Condition
+  events::Port
+  data::Port
   renderLoop::Task
   currentUI::Node
-  Window() = new(Port(), Port(), Condition())
+  Window() = new(Condition(), Port(), Port())
 end
 
 type App
@@ -25,25 +25,27 @@ end
 
 App(title; version=v"1.4.4") = App(title, open(`$(install(version)) $app_path`, "w")...)
 
-Window(a::App, params::Associative) = begin
+Window(a::App, data; kwargs...) = begin
   window = Window()
   port,server = listenany(3000)
-  params = Dict(:title=>a.title, params..., :query=>Dict(:port=>port, :runtime=>runtime))
-  show(a.stdin, json_mime, params)
+  show(a.stdin, json_mime, Dict(:title=>a.title,
+                                Dict(kwargs)...,
+                                :query=>Dict(:port=>port, :runtime=>runtime)))
   write(a.stdin, '\n')
 
   # connect with the window
   sock = accept(server)
 
   window.renderLoop = @schedule try
-    # Send over initial rendering
-    window.currentUI = take!(window.ui)
+    # Send over initial screen
+    window.currentUI = convert(Container{:html}, Cursor(data, window.data))
     show(sock, json_mime, window.currentUI)
     write(sock, '\n')
     notify(window.ready)
 
     # Write patches
-    for nextGUI in window.ui
+    for cursor in window.data
+      nextGUI = convert(Container{:html}, cursor)
       patch = diff(window.currentUI, nextGUI)
       isnull(patch) && continue
       show(sock, json_mime, patch)
@@ -65,28 +67,10 @@ Window(a::App, params::Associative) = begin
     end
   end
 
-  # allow renderLoop to subscribe to UI's so it doesn't miss any
-  sleep(0)
   return window
 end
 
 Base.wait(w::Window) = wait(w.renderLoop)
 Base.wait(a::App) = wait(a.proc)
-Base.put!(w::Window, n) = put!(w.ui, n)
 
 dispatch(w::Window, e::Events.Event) = dispatch(w.currentUI, e)
-
-"""
-Starts a rendering loop where the return value of each iteration becomes the
-UI of the window. It wraps your data in a `Cursor` which enables you to treat
-immutable data almost as if it was mutable.
-"""
-loop(render::Function, w::Window, initial_data) = begin
-  c = TopLevelCursor(initial_data, Port())
-  l = @schedule for cursor in c.port
-    put!(w, render(cursor))
-  end
-  sleep(0) # let loop start before puting
-  put!(c.port, c)
-  return l
-end
