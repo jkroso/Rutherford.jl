@@ -14,7 +14,7 @@ immutable Item
 end
 
 Base.convert(::Type{Node}, x::Cursor{Item}) =
-  @dom [:div class-done=need(x[:done])
+  @dom [:div class.done=need(x[:done])
              css"""
              display: flex
              align-items: center

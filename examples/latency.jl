@@ -9,11 +9,11 @@
 Base.convert(::Type{Container{:html}}, c::Cursor) =
   @dom [:html
     [:head stylesheets...]
-    [:body class=css"""
-                 display: flex
-                 justify-content: space-around
-                 align-items: center
-                 """
+    [:body css"""
+           display: flex
+           justify-content: space-around
+           align-items: center
+           """
       [:pre repr(need(c))]]]
 
 const app = App("Rutherford Example")
