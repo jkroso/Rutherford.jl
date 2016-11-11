@@ -1,5 +1,5 @@
 @require "github.com/jkroso/DOM.jl" diff runtime Events dispatch Node Container
-@require "github.com/jkroso/Electron.jl" install
+@require "github.com/jkroso/Electron.jl" install latest
 @require "github.com/jkroso/Cursor.jl" Cursor
 @require "github.com/jkroso/write-json.jl"
 @require "github.com/jkroso/Port.jl" Port
@@ -21,7 +21,7 @@ type App
   proc::Base.Process
 end
 
-App(title; version=v"1.4.4") = App(title, open(`$(install(version)) $app_path`, "w")...)
+App(title; version=latest()) = App(title, open(`$(install(version)) $app_path`, "w")...)
 
 Window(a::App, data; kwargs...) = begin
   window = Window()
