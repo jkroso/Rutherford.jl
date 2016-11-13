@@ -1,5 +1,5 @@
 @require "github.com/jkroso/DOM.jl" => DOM Events dispatch @dom
-@require "github.com/jkroso/Electron.jl" install latest
+@require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/Cursor.jl" Cursor
 @require "github.com/jkroso/write-json.jl"
 @require "github.com/jkroso/Port.jl" Port
@@ -18,20 +18,12 @@ type Window
   Window(ui, server, sock) = new(Port(), ui, server, sock, Condition())
 end
 
-type App
-  title::String
-  stdin::IO
-  proc::Base.Process
-end
-
-App(title; version=latest()) = App(title, open(`$(install(version)) $app_path`, "w")...)
-
 Window(a::App, data=nothing; kwargs...) = begin
   port, server = listenany(3000)
   initial_UI = @dom [:html
     [:head
       [:script "const params=" stringmime("application/json", Dict(:port=>port,:runtime=>DOM.runtime))]
-      [:script "require('$(joinpath(app_path, "index.js"))')"]]
+      [:script "require('$(joinpath(@dirname(), "index.js"))')"]]
     [:body]]
   html = stringmime("text/html", initial_UI)
 
