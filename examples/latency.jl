@@ -6,7 +6,8 @@
 @require "github.com/jkroso/DOM.jl" Container exports...
 @require ".." App Window
 
-Base.convert(::Type{Container{:html}}, c::Cursor) =
+Base.convert(::Type{Container{:html}}, c::Cursor) = begin
+  change(e) = put!(c, e)
   @dom [:html
     [:head stylesheets...]
     [:body css"""
@@ -14,16 +15,16 @@ Base.convert(::Type{Container{:html}}, c::Cursor) =
            justify-content: space-around
            align-items: center
            """
+           onclick=change
+           onmousemove=change
+           onkeydown=change
       [:pre repr(need(c))]]]
+end
 
 const app = App("Rutherford Example")
 
 const window = Window(app, Text("Loading"), width=1200,
                                             height=700,
                                             titleBarStyle=:hidden)
-
-@schedule for e in window.events
-  put!(window.data, Cursor(e))
-end
 
 wait(app) # keeps the process open
