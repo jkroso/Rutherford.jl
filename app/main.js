@@ -14,11 +14,9 @@ readline.createInterface({
   terminal: false
 }).on('line', line => {
   const msg = JSON.parse(line)
-  const {id,html} = msg
   ready.then(() => {
     const window = new BrowserWindow(msg)
     if (msg.console) window.openDevTools()
-    window.on('closed', () => process.stdout.write('closed ' + id + '\n'))
-    window.loadURL(`data:text/html,<!DOCTYPE html>${html}`)
+    window.loadURL(`data:text/html,<!DOCTYPE html>${msg.html}`)
   })
 })
