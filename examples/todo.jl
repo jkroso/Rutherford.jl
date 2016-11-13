@@ -66,10 +66,6 @@ const data = Dict(:items=>[Item("GST", false),
                            Item("Order pop-riveter", false),
                            Item("Write todo example", true)])
 
-const app = App("Rutherford Example")
-
-Window(app, data, width=1200,
-                  height=700,
-                  titleBarStyle=:hidden)
-
+const app = App("Rutherford Example", version=v"1.4.4")
+const w = Window(app, data, width=1200, height=700, titleBarStyle=:hidden)
 wait(app) # keeps the process open

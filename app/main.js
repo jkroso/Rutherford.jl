@@ -14,11 +14,11 @@ readline.createInterface({
   terminal: false
 }).on('line', line => {
   const msg = JSON.parse(line)
-  var url = 'file://' + __dirname + '/index.html'
-  if ('query' in msg) url += '?' + querystring.encode(msg.query)
+  const {id,html} = msg
   ready.then(() => {
     const window = new BrowserWindow(msg)
-    window.loadURL(url)
     if (msg.console) window.openDevTools()
+    window.on('closed', () => process.stdout.write('closed ' + id + '\n'))
+    window.loadURL(`data:text/html,<!DOCTYPE html>${html}`)
   })
 })

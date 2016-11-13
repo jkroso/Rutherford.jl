@@ -1,18 +1,21 @@
-@require "github.com/jkroso/DOM.jl" diff runtime Events dispatch Node Container
+@require "github.com/jkroso/DOM.jl" => DOM Events dispatch @dom
 @require "github.com/jkroso/Electron.jl" install latest
 @require "github.com/jkroso/Cursor.jl" Cursor
 @require "github.com/jkroso/write-json.jl"
 @require "github.com/jkroso/Port.jl" Port
 
 const app_path = joinpath(@dirname(), "app")
-const json_mime = MIME("application/json")
+const json = MIME("application/json")
 
 type Window
-  events::Port
   data::Port
+  currentUI::DOM.Node
+  server::Base.TCPServer
+  sock::TCPSocket
+  onclose::Condition
+  eventLoop::Task
   renderLoop::Task
-  currentUI::Node
-  Window() = new(Port(), Port())
+  Window(ui, server, sock) = new(Port(), ui, server, sock, Condition())
 end
 
 type App
@@ -23,48 +26,48 @@ end
 
 App(title; version=latest()) = App(title, open(`$(install(version)) $app_path`, "w")...)
 
-Window(a::App, data; kwargs...) = begin
-  window = Window()
-  port,server = listenany(3000)
-  show(a.stdin, json_mime, Dict(:title=>a.title,
-                                Dict(kwargs)...,
-                                :query=>Dict(:port=>port, :runtime=>runtime)))
+Window(a::App, data=nothing; kwargs...) = begin
+  port, server = listenany(3000)
+  initial_UI = @dom [:html
+    [:head
+      [:script "const params=" stringmime("application/json", Dict(:port=>port,:runtime=>DOM.runtime))]
+      [:script "require('$(joinpath(app_path, "index.js"))')"]]
+    [:body]]
+  html = stringmime("text/html", initial_UI)
+
+  show(a.stdin, json, Dict(:title=>a.title, Dict(kwargs)..., :html=>html))
   write(a.stdin, '\n')
 
   # connect with the window
-  sock = accept(server)
-
-  window.renderLoop = @schedule try
-    # Send over initial screen
-    window.currentUI = convert(Container{:html}, Cursor(data, window.data))
-    show(sock, json_mime, window.currentUI)
-    write(sock, '\n')
-
-    # Write patches
-    for cursor in window.data
-      nextGUI = convert(Container{:html}, cursor)
-      patch = diff(window.currentUI, nextGUI)
-      isnull(patch) && continue
-      show(sock, json_mime, patch)
-      write(sock, '\n')
-      window.currentUI = nextGUI
-    end
-  finally
-    close(server)
-  end
+  w = Window(initial_UI, server, accept(server))
 
   # Produce a series of events
-  @schedule for line in eachline(sock)
-    e = Events.parse_event(line)
-    dispatch(window, e)
-    put!(window.events, e)
+  w.eventLoop = @schedule for line in eachline(w.sock)
+    dispatch(w, Events.parse_event(line))
   end
 
-  return window
+  w.renderLoop = @schedule for cursor in w.data
+    display(w, convert(DOM.Container{:html}, cursor))
+  end
+
+  display(w, convert(DOM.Container{:html}, Cursor(data, w.data)))
+
+  w
 end
 
-Base.wait(w::Window) = wait(w.renderLoop)
+Base.wait(w::Window) = waitany(w.onclose, w.eventLoop, w.renderloop)
 Base.wait(a::App) = wait(a.proc)
+Base.close(w::Window) = close(w.server)
+
+Base.display(w::Window, nextUI::DOM.Node) = begin
+  patch = DOM.diff(w.currentUI, nextUI)
+  if !isnull(patch)
+    show(w.sock, json, patch)
+    write(w.sock, '\n')
+  end
+  w.currentUI = nextUI
+  nothing
+end
 
 dispatch(w::Window, e::Events.Event) = dispatch(w.currentUI, e)
 

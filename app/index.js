@@ -1,21 +1,14 @@
-const querystring = require('querystring')
+const runtime = require(params.runtime)
 const readline = require('readline')
 const net = require('net')
 
-const query = querystring.parse(location.search.slice(1))
-const runtime = require(query.runtime)
-const sock = net.connect(Number(query.port))
+const sock = net.connect(Number(params.port))
 
 // read patchs and apply them
-const io = readline.createInterface({
+readline.createInterface({
   terminal: false,
   input: sock
-}).once('line', line => {
-  runtime.init(JSON.parse(line))
-  io.on('line', line => {
-    runtime.mutate(JSON.parse(line))
-  })
-})
+}).on('line', line => runtime.mutate(JSON.parse(line)))
 
 // write an event to the output stream
 const send = (event) => {
