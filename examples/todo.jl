@@ -49,7 +49,7 @@ Base.convert(::Type{Container{:html}}, c::Cursor) =
     [:head [:title "Rutherford Example"] stylesheets...]
     [:body css"display: flex; justify-content: space-around; align-items: center"
       [:div css"width: 500px; align-self: flex-start; margin-top: 100px; font-family: monospace"
-        [TextFeild css"""
+        [TextField css"""
                    width: 100%
                    font: 2em/1.8em monospace
                    padding: 0 .8em
