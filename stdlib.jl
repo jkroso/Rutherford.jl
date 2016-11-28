@@ -1,7 +1,7 @@
 @require "github.com/jkroso/Prospects.jl" exports...
 @require "github.com/jkroso/DOM.jl" exports...
 
-TextFeild(attrs, children) = begin
+TextField(attrs, children) = begin
   cursor = attrs[:cursor]
   onkeydown(e) = begin
     if e.key == "Enter"
@@ -19,4 +19,4 @@ TextFeild(attrs, children) = begin
                attrs...]
 end
 
-export TextFeild
+export TextField
