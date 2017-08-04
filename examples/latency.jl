@@ -15,7 +15,7 @@ Base.convert(::Type{Container{:html}}, c::Cursor) = begin
            justify-content: space-around
            align-items: center
            """
-           onclick=change
+           onmousedown=change
            onmousemove=change
            onkeydown=change
       [:pre repr(need(c))]]]

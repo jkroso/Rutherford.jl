@@ -2,13 +2,13 @@
 # This example is just a minimal Todo list. It's intended to show how
 # a typical app would operate over an immutable data structure
 #
-@require "github.com/jkroso/Prospects.jl" need unshift
-@require "github.com/jkroso/Cursor.jl" Cursor assoc_in!
+@require "github.com/jkroso/Prospects.jl" need unshift assoc_in
 @require "github.com/jkroso/DOM.jl" Node Container exports...
+@require "github.com/jkroso/Cursor.jl" Cursor
 @require "../stdlib" exports...
 @require ".." App Window
 
-immutable Item
+struct Item
   title::String
   done::Bool
 end
@@ -46,7 +46,7 @@ Base.convert(::Type{Node}, x::Cursor{Item}) =
 
 Base.convert(::Type{Container{:html}}, c::Cursor) =
   @dom [:html
-    [:head [:title "Rutherford Example"] stylesheets...]
+    [:head [:title "Todo List Example"] stylesheets...]
     [:body css"display: flex; justify-content: space-around; align-items: center"
       [:div css"width: 500px; align-self: flex-start; margin-top: 100px; font-family: monospace"
         [TextFeild css"""
@@ -57,15 +57,19 @@ Base.convert(::Type{Container{:html}}, c::Cursor) =
                    border: 1px solid rgb(180,180,180)
                    """
           placeholder="What needs doing?"
-          cursor=get(c, :input, Dict(:value=>"",:focused=>true))
-          onsubmit=value->assoc_in!(c, [:input :value]=>"",
-                                       [:items]=>unshift(need(c[:items]), Item(value, false)))]
+          cursor=c[:input]
+          onsubmit=function(txt)
+            isempty(txt) && return
+            put!(c, assoc_in(need(c), [:input, :value] => "",
+                                      [:items] => unshift(need(c)[:items], Item(txt, false))))
+          end]
         [:ul css"margin: 20px 0; border: 1px solid rgb(180,180,180)" c[:items]...]]]]
 
-const data = Dict(:items=>[Item("GST", false),
-                           Item("Order pop-riveter", false),
-                           Item("Write todo example", true)])
+const data = Dict(:input => Dict(:value=>"", :focused=>true),
+                  :items => [Item("GST", false),
+                             Item("Order pop-riveter", false),
+                             Item("Write todo example", true)])
 
-const app = App("Rutherford Example", version=v"1.4.6")
+const app = App("Todo List Example", version=v"1.6.11")
 const w = Window(app, data, width=1200, height=700, titleBarStyle=:hidden)
 wait(app) # keeps the process open
