@@ -7,7 +7,7 @@
 const app_path = joinpath(@dirname(), "app")
 const json = MIME("application/json")
 
-type Window
+mutable struct Window
   data::Port
   currentUI::DOM.Node
   server::Base.TCPServer
