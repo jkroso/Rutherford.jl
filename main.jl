@@ -1,4 +1,4 @@
-@require "github.com/jkroso/DOM.jl" => DOM Events dispatch @dom
+@require "github.com/jkroso/DOM.jl" => DOM Events emit @dom
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/Cursor.jl" Cursor
 @require "github.com/jkroso/write-json.jl"
@@ -35,7 +35,7 @@ Window(a::App, data=nothing; kwargs...) = begin
 
   # Produce a series of events
   w.eventLoop = @schedule for line in eachline(w.sock)
-    dispatch(w, Events.parse_event(line))
+    emit(w, Events.parse_event(line))
   end
 
   w.renderLoop = @schedule for cursor in w.data
@@ -61,6 +61,6 @@ Base.display(w::Window, nextUI::DOM.Node) = begin
   nothing
 end
 
-dispatch(w::Window, e::Events.Event) = dispatch(w.currentUI, e)
+emit(w::Window, e::Events.Event) = emit(w.currentUI, e)
 
 export App, Window

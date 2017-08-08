@@ -6,9 +6,9 @@ TextFeild(attrs, children) = begin
   @destruct {cursor, rest...} = attrs
   @destruct {value, :focused=>isfocused, editpoint=length(value)} = need(cursor)
   editpoint = min(editpoint, length(value))
-  onkeydown(e) = begin
+  onkeydown(e, path) = begin
     if e.key == "Enter"
-      attrs[:onsubmit](value)
+      emit(path, :onsubmit, value)
     elseif e.key == "Backspace"
       put!(cursor, push(need(cursor),
                         :value => string(value[1:editpoint-1], value[editpoint+1:end]),
