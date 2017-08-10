@@ -79,7 +79,7 @@ const w = Window(app, data, width=1200, height=700, titleBarStyle=:hidden)
 #   default_handler = Atom.handlers["eval"]
 #   Atom.handle("eval") do expr
 #     result = default_handler(expr)
-#     render(w)
+#     Base.invokelatest(render, w)
 #     result
 #   end
 # end
