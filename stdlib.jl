@@ -27,12 +27,11 @@ TextFeild(attrs, children) = begin
       put!(cursor, push(need(cursor),
                         :value => string(value[1:editpoint], e.key, value[editpoint+1:end]),
                         :editpoint => editpoint + 1))
-    else
-      @show e
     end
   end
   @dom [:input(:type=:text, isfocused, onkeydown, selectionStart=editpoint,
                                                   selectionEnd=editpoint,
+                                                  size=length(value) + 1,
                                                   value,
                                                   rest...)]
 end
