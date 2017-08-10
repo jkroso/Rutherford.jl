@@ -6,7 +6,7 @@
 @require "github.com/jkroso/DOM.jl" Node Container exports...
 @require "github.com/jkroso/Cursor.jl" Cursor
 @require "../stdlib" exports...
-@require ".." App Window
+@require ".." App Window render
 
 struct Item
   title::String
@@ -58,7 +58,7 @@ Base.convert(::Type{Container{:html}}, c::Cursor) =
                    """
           placeholder="What needs doing?"
           cursor=c[:input]
-          onsubmit=function(txt)
+          onsubmit=function onsubmit(txt)
             isempty(txt) && return
             put!(c, assoc_in(need(c), [:input, :value] => "",
                                       [:items] => unshift(need(c)[:items], Item(txt, false))))
@@ -72,4 +72,16 @@ const data = Dict(:input => Dict(:value=>"", :focused=>true),
 
 const app = App("Todo List Example", version=v"1.6.11")
 const w = Window(app, data, width=1200, height=700, titleBarStyle=:hidden)
+
+# If you want to develop this code interactively in Atom then just
+# uncomment this code and comment out the `wait(app)` below
+# let
+#   default_handler = Atom.handlers["eval"]
+#   Atom.handle("eval") do expr
+#     result = default_handler(expr)
+#     render(w)
+#     result
+#   end
+# end
+
 wait(app) # keeps the process open

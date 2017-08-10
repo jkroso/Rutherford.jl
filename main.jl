@@ -15,6 +15,7 @@ mutable struct Window
   onclose::Condition
   eventLoop::Task
   renderLoop::Task
+  currentCursor::Cursor
   Window(ui, server, sock) = new(Port(), ui, server, sock, Condition())
 end
 
@@ -35,16 +36,34 @@ Window(a::App, data=nothing; kwargs...) = begin
 
   # Produce a series of events
   w.eventLoop = @schedule for line in eachline(w.sock)
-    emit(w, Events.parse_event(line))
+    @static if isinteractive()
+      # saves world age problems
+      Base.invokelatest(emit, w, Events.parse_event(line))
+    else
+      emit(w, Events.parse_event(line))
+    end
   end
 
   w.renderLoop = @schedule for cursor in w.data
-    display(w, convert(DOM.Container{:html}, cursor))
+    @static if isinteractive()
+      Base.invokelatest(render, w, cursor)
+    else
+      render(w, cursor)
+    end
   end
 
-  display(w, convert(DOM.Container{:html}, Cursor(data, w.data)))
+  render(w, Cursor(data, w.data))
 
   w
+end
+
+"Rerender the window using its current data"
+render(w::Window) = display(w, convert(DOM.Container{:html}, w.currentCursor))
+
+"Render the window with new data"
+render(w::Window, c::Cursor) = begin
+  w.currentCursor = c
+  display(w, convert(DOM.Container{:html}, c))
 end
 
 Base.wait(w::Window) = waitany(w.onclose, w.eventLoop, w.renderloop)
