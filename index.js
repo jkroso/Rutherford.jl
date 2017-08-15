@@ -40,12 +40,4 @@ const send = (event) => {
   'keyup',
   'resize',
   'scroll',
-  'select',
-  'change',
-  'submit',
-  'reset',
-  'focus',
-  'blur',
-  'focusin',
-  'focusout'
 ].forEach(event => addEventListener(event, send, true))
