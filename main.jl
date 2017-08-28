@@ -66,7 +66,7 @@ render(w::Window, c::Cursor) = begin
   display(w, convert(DOM.Container{:html}, c))
 end
 
-Base.wait(w::Window) = waitany(w.onclose, w.eventLoop, w.renderloop)
+Base.wait(w::Window) = waitany(w.onclose, w.eventLoop, w.renderLoop)
 Base.wait(a::App) = wait(a.proc)
 Base.close(w::Window) = close(w.server)
 
