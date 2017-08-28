@@ -12,18 +12,17 @@ mutable struct Window
   currentUI::DOM.Node
   server::Base.TCPServer
   sock::TCPSocket
-  onclose::Condition
   eventLoop::Task
   renderLoop::Task
   currentCursor::Cursor
-  Window(ui, server, sock) = new(Port(), ui, server, sock, Condition())
+  Window(ui, server, sock) = new(Port(), ui, server, sock)
 end
 
 Window(a::App, data=nothing; kwargs...) = begin
   port, server = listenany(3000)
   initial_UI = @dom [:html
     [:head
-      [:script "const params=" stringmime("application/json", Dict(:port=>port,:runtime=>DOM.runtime))]
+      [:script "const params=" stringmime(json, Dict(:port=>port,:runtime=>DOM.runtime))]
       [:script "require('$(joinpath(@dirname(), "index.js"))')"]]
     [:body]]
   html = stringmime("text/html", initial_UI)
@@ -66,7 +65,7 @@ render(w::Window, c::Cursor) = begin
   display(w, convert(DOM.Container{:html}, c))
 end
 
-Base.wait(w::Window) = waitany(w.onclose, w.eventLoop, w.renderLoop)
+Base.wait(w::Window) = wait(w.eventLoop)
 Base.wait(a::App) = wait(a.proc)
 Base.close(w::Window) = close(w.server)
 

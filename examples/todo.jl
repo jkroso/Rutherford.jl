@@ -70,8 +70,8 @@ const data = Dict(:input => Dict(:value=>"", :focused=>true),
                              Item("Order pop-riveter", false),
                              Item("Write todo example", true)])
 
-const app = App("Todo List Example", version=v"1.6.11")
-const w = Window(app, data, width=1200, height=700, titleBarStyle=:hidden)
+const app = App("Todo List Example", version=v"1.7.5")
+const w = Window(app, data)
 
 # If you want to develop this code interactively in Atom then just
 # uncomment this code and comment out the `wait(app)` below
@@ -84,4 +84,4 @@ const w = Window(app, data, width=1200, height=700, titleBarStyle=:hidden)
 #   end
 # end
 
-wait(app) # keeps the process open
+wait(w) # keeps the process open
