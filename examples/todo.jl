@@ -3,10 +3,10 @@
 # a typical app would operate over an immutable data structure
 #
 @require "github.com/jkroso/Prospects.jl" need unshift assoc_in
-@require "github.com/jkroso/DOM.jl" Node Container exports...
+@require "github.com/jkroso/DOM.jl" Node Container HTML @dom @css_str
 @require "github.com/jkroso/Cursor.jl" Cursor
-@require "../stdlib" exports...
-@require ".." App Window render
+@require "../stdlib" TextFeild
+@require ".." App Window
 
 struct Item
   title::String
@@ -40,30 +40,28 @@ Base.convert(::Type{Node}, x::Cursor{Item}) =
              """
     [:input :type=:checkbox
             :checked=need(x[:done])
-            :onclick=e->x[:done] = !x[:done]]
+            :onclick=e->x[:done] = !need(x[:done])]
     [:p need(x[:title])]
     [:button "×" :onclick=e->delete!(x)]]
 
 Base.convert(::Type{Container{:html}}, c::Cursor) =
-  @dom [:html
-    [:head [:title "Todo List Example"] stylesheets...]
-    [:body css"display: flex; justify-content: space-around; align-items: center"
-      [:div css"width: 500px; align-self: flex-start; margin-top: 100px; font-family: monospace"
-        [TextFeild css"""
-                   width: 100%
-                   font: 2em/1.8em monospace
-                   padding: 0 .8em
-                   border-radius: 3px
-                   border: 1px solid rgb(180,180,180)
-                   """
-          placeholder="What needs doing?"
-          cursor=c[:input]
-          onsubmit=function onsubmit(txt)
-            isempty(txt) && return
-            put!(c, assoc_in(need(c), [:input, :value] => "",
-                                      [:items] => unshift(need(c)[:items], Item(txt, false))))
-          end]
-        [:ul css"margin: 20px 0; border: 1px solid rgb(180,180,180)" c[:items]...]]]]
+  @dom [HTML css"display: flex; justify-content: space-around; align-items: center"
+    [:div css"width: 500px; align-self: flex-start; margin-top: 100px; font-family: monospace"
+      [TextFeild css"""
+                 width: 100%
+                 font: 2em/1.8em monospace
+                 padding: 0 .8em
+                 border-radius: 3px
+                 border: 1px solid rgb(180,180,180)
+                 """
+        placeholder="What needs doing?"
+        cursor=c[:input]
+        onsubmit=function onsubmit(txt)
+          isempty(txt) && return
+          put!(c, assoc_in(need(c), [:input, :value] => "",
+                                    [:items] => unshift(need(c)[:items], Item(txt, false))))
+        end]
+      [:ul css"margin: 20px 0; border: 1px solid rgb(180,180,180)" c[:items]...]]]
 
 const data = Dict(:input => Dict(:value=>"", :focused=>true),
                   :items => [Item("GST", false),
@@ -77,6 +75,7 @@ const w = Window(app, data)
 # uncomment this code and comment out the `wait(app)` below
 # let
 #   default_handler = Atom.handlers["eval"]
+#   @require ".." render
 #   Atom.handle("eval") do expr
 #     result = default_handler(expr)
 #     Base.invokelatest(render, w)
