@@ -41,3 +41,8 @@ const send = (event) => {
   'resize',
   'scroll',
 ].forEach(event => addEventListener(event, send, true))
+
+runtime.commands.AsyncPromise = ({id, value}) => {
+  var el = document.getElementById(id)
+  el && el.replaceWith(runtime.create(value))
+}

@@ -1,4 +1,5 @@
-@require "github.com/jkroso/DOM.jl" => DOM Events emit @dom
+@require "github.com/jkroso/DOM.jl" => DOM Replace Events exports...
+@require "github.com/jkroso/Promises.jl" Promise failed
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/Cursor.jl" Cursor
 @require "github.com/jkroso/write-json.jl"
@@ -57,20 +58,21 @@ Window(a::App, data=nothing; kwargs...) = begin
 end
 
 "Rerender the window using its current data"
-render(w::Window) = display(w, convert(DOM.Container{:html}, w.currentCursor))
-
+render(w::Window) = render(w, w.currentCursor)
 "Render the window with new data"
 render(w::Window, c::Cursor) = begin
   w.currentCursor = c
-  display(w, convert(DOM.Container{:html}, c))
+  task_local_storage(:window, w) do
+    display(w, convert(DOM.Container{:html}, c))
+  end
 end
 
 Base.wait(w::Window) = wait(w.eventLoop)
 Base.wait(a::App) = wait(a.proc)
 Base.close(w::Window) = close(w.server)
 
-Base.display(w::Window, nextUI::DOM.Node) = begin
-  patch = DOM.diff(w.currentUI, nextUI)
+Base.display(w::Window, nextUI::Node) = begin
+  patch = diff(w.currentUI, nextUI)
   if !isnull(patch)
     show(w.sock, json, patch)
     write(w.sock, '\n')
@@ -80,5 +82,39 @@ Base.display(w::Window, nextUI::DOM.Node) = begin
 end
 
 emit(w::Window, e::Events.Event) = emit(w.currentUI, e)
+
+mutable struct AsyncNode <: Node
+  promise::Promise
+  current::Bool
+end
+
+Base.convert(::Type{Node}, p::Promise) = begin
+  w = task_local_storage(:window)
+  n = AsyncNode(p, true)
+  @schedule try wait(p) catch finally
+    if n.current
+      show(w.sock, json, Dict(:command => "AsyncPromise",
+                              :id => object_id(p),
+                              :iserror => p.state == failed,
+                              :value => convert(Node, p.state == failed ? p.error : p.value)))
+      write(w.sock, '\n')
+    end
+  end
+  n
+end
+
+Base.convert(::Type{DOM.Primitive}, a::AsyncNode) = begin
+  @dom [:div id=object_id(a.promise)]
+end
+
+diff(a::AsyncNode, b::AsyncNode) = begin
+  a.current = false
+  a.promise === b.promise && return Nullable{Patch}()
+  if isready(a.promise)
+    DOM.SetAttribute(:id, object_id(b.promise))
+  else
+    DOM.Replace(convert(Primitive, b))
+  end |> Nullable{Patch}
+end
 
 export App, Window
