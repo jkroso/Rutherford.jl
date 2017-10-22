@@ -1,4 +1,4 @@
-@require "github.com/jkroso/DOM.jl" => DOM Replace Events exports...
+@require "github.com/jkroso/DOM.jl" => DOM Replace Events add_attr exports...
 @require "github.com/jkroso/Promises.jl" Promise failed
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/Cursor.jl" Cursor
@@ -7,6 +7,14 @@
 
 const app_path = joinpath(@dirname(), "app")
 const json = MIME("application/json")
+
+const msglock = ReentrantLock()
+msg(io::IO, data) = begin
+  lock(msglock)
+  show(io, json, data)
+  write(io, '\n')
+  unlock(msglock)
+end
 
 mutable struct Window
   data::Port
@@ -26,10 +34,8 @@ Window(a::App, data=nothing; kwargs...) = begin
       [:script "const params=" stringmime(json, Dict(:port=>port,:runtime=>DOM.runtime))]
       [:script "require('$(joinpath(@dirname(), "index.js"))')"]]
     [:body]]
-  html = stringmime("text/html", initial_UI)
 
-  show(a.stdin, json, Dict(:title=>a.title, Dict(kwargs)..., :html=>html))
-  write(a.stdin, '\n')
+  msg(a.stdin, Dict(:title=>a.title, Dict(kwargs)..., :html=>stringmime("text/html", initial_UI)))
 
   # connect with the window
   w = Window(initial_UI, server, accept(server))
@@ -73,10 +79,7 @@ Base.close(w::Window) = close(w.server)
 
 Base.display(w::Window, nextUI::Node) = begin
   patch = diff(w.currentUI, nextUI)
-  if !isnull(patch)
-    show(w.sock, json, patch)
-    write(w.sock, '\n')
-  end
+  isnull(patch) || msg(w.sock, patch)
   w.currentUI = nextUI
   nothing
 end
@@ -91,13 +94,14 @@ end
 Base.convert(::Type{Node}, p::Promise) = begin
   w = task_local_storage(:window)
   n = AsyncNode(p, true)
-  @schedule try wait(p) catch finally
+  @schedule try wait(p) catch e
+    Base.showerror(STDERR, e)
+  finally
     if n.current
-      show(w.sock, json, Dict(:command => "AsyncPromise",
-                              :id => object_id(p),
-                              :iserror => p.state == failed,
-                              :value => convert(Node, p.state == failed ? p.error : p.value)))
-      write(w.sock, '\n')
+      msg(w.sock, Dict(:command => "AsyncPromise",
+                       :id => object_id(p),
+                       :iserror => p.state == failed,
+                       :value => convert(Node, p.state == failed ? p.error : p.value)))
     end
   end
   n
@@ -107,6 +111,7 @@ Base.convert(::Type{DOM.Primitive}, a::AsyncNode) = begin
   @dom [:div id=object_id(a.promise)]
 end
 
+add_attr(a::AsyncNode, key::Symbol, value) = a
 diff(a::AsyncNode, b::AsyncNode) = begin
   a.current = false
   a.promise === b.promise && return Nullable{Patch}()
