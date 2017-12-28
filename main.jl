@@ -1,14 +1,16 @@
-@require "github.com/jkroso/DOM.jl" => DOM Replace Events add_attr exports...
+@require "github.com/jkroso/DOM.jl" => DOM Events Primitive Node @dom
 @require "github.com/jkroso/Promises.jl" Promise failed
+@require "github.com/jkroso/DynamicVar.jl" @dynamic!
 @require "github.com/jkroso/Electron.jl" App
-@require "github.com/jkroso/Cursor.jl" Cursor
 @require "github.com/jkroso/write-json.jl"
-@require "github.com/jkroso/Port.jl" Port
+@require "./State.jl" State Cursor need state
 
+@dynamic! currentUI = nothing
 const app_path = joinpath(@dirname(), "app")
 const json = MIME("application/json")
-
 const msglock = ReentrantLock()
+
+msg(a::App, data) = msg(a.stdin, data)
 msg(io::IO, data) = begin
   lock(msglock)
   show(io, json, data)
@@ -16,75 +18,119 @@ msg(io::IO, data) = begin
   unlock(msglock)
 end
 
+"A Window corresponds to an OS window and can be used to display a UI"
 mutable struct Window
-  data::Port
-  currentUI::DOM.Node
-  server::Base.TCPServer
   sock::TCPSocket
-  eventLoop::Task
-  renderLoop::Task
-  currentCursor::Cursor
-  Window(ui, server, sock) = new(Port(), ui, server, sock)
+  view::Node
+  UI::Any
+  loop::Task
 end
 
-Window(a::App, data=nothing; kwargs...) = begin
+Window(a::App; kwargs...) = begin
   port, server = listenany(3000)
-  initial_UI = @dom [:html
+  initial_view = @dom [:html
     [:head
       [:script "const params=" stringmime(json, Dict(:port=>port,:runtime=>DOM.runtime))]
       [:script "require('$(joinpath(@dirname(), "index.js"))')"]]
     [:body]]
 
-  msg(a.stdin, Dict(:title=>a.title, Dict(kwargs)..., :html=>stringmime("text/html", initial_UI)))
+  # tell electron to create a window
+  msg(a, Dict(:title => a.title,
+              Dict(kwargs)...,
+              :html => stringmime("text/html", initial_view)))
 
-  # connect with the window
-  w = Window(initial_UI, server, accept(server))
+  # wait for that window to connect with this process
+  sock = accept(server)
 
-  # Produce a series of events
-  w.eventLoop = @schedule for line in eachline(w.sock)
-    @static if isinteractive()
-      # saves world age problems
-      Base.invokelatest(emit, w, Events.parse_event(line))
-    else
-      emit(w, Events.parse_event(line))
-    end
+  # send events to the UI
+  loop = @schedule for line in eachline(sock)
+    DOM.emit(w.UI, Events.parse_event(line))
   end
 
-  w.renderLoop = @schedule for cursor in w.data
-    @static if isinteractive()
-      Base.invokelatest(render, w, cursor)
-    else
-      render(w, cursor)
-    end
-  end
-
-  render(w, Cursor(data, w.data))
-
-  w
+  w = Window(sock, initial_view, nothing, loop)
 end
 
-"Rerender the window using its current data"
-render(w::Window) = render(w, w.currentCursor)
-"Render the window with new data"
-render(w::Window, c::Cursor) = begin
-  w.currentCursor = c
-  task_local_storage(:window, w) do
-    display(w, convert(DOM.Container{:html}, c))
+Base.wait(e::Window) = wait(e.loop)
+msg(a::Window, data) = msg(a.sock, data)
+
+"""
+An UI manages the presentation and manipulation of a State object. One UI
+can be displayed on multiple devices.
+"""
+mutable struct UI
+  view::Node
+  render::Any # any callable object
+  devices::Vector
+  state::State
+  UI(fn) = new(DOM.null_node, fn, [])
+end
+
+DOM.emit(ui::UI, e::Events.Event) =
+  @static if isinteractive()
+    Base.invokelatest(DOM.emit, ui.view, e)
+  else
+    DOM.emit(ui.view, e)
+  end
+msg(ui::UI, data) = foreach(d->msg(d, data), ui.devices)
+
+"""
+Connect a UI object with a State object so that when the state changes
+it triggers an update to the UI
+"""
+couple(ui::UI, s::State) = begin
+  ui.state = s
+  push!(s.UIs, ui)
+end
+
+"""
+Connect a Window with a UI so that the UI can render to the window
+and the window can send events to the UI for it to handle
+"""
+couple(w::Window, ui::UI) = begin
+  @assert w.UI == nothing "This window is already coupled with a UI"
+  w.UI = ui
+  push!(ui.devices, w)
+  display(w, ui)
+end
+
+decouple(w::Window, ui::UI) = begin
+  w.UI = nothing
+  deleteat!(ui.devices, findfirst(ui.devices, w))
+end
+
+"Generate the view representation using UI's current state"
+render(ui::UI) =
+  @dynamic! let state = ui.state, currentUI = ui
+    ui.render(need(ui.state))
+  end
+
+Base.display(ui::UI) = begin
+  ui.view = render(ui)
+  for device in ui.devices
+    display(device, ui.view)
   end
 end
 
-Base.wait(w::Window) = wait(w.eventLoop)
-Base.wait(a::App) = wait(a.proc)
-Base.close(w::Window) = close(w.server)
+Base.display(w::Window, ui::UI) = begin
+  ui.view = render(ui)
+  display(w, ui.view)
+end
 
-Base.display(w::Window, nextUI::Node) = begin
-  patch = diff(w.currentUI, nextUI)
-  isnull(patch) || msg(w.sock, patch)
-  w.currentUI = nextUI
+Base.display(w::Window, view::Node) = begin
+  patch = DOM.diff(w.view, view)
+  isnull(patch) || msg(w, patch)
+  w.view = view
   nothing
 end
 
-emit(w::Window, e::Events.Event) = emit(w.currentUI, e)
+window(a::App, ui::UI, data) = window(a, ui, State(data, []))
+window(fn::Function, a::App, data) = window(a, UI(fn), data)
+window(a::App, ui::UI, state::State) = begin
+  w = Window(a)
+  couple(ui, state)
+  couple(w, ui)
+  w
+end
 
 mutable struct AsyncNode <: Node
   promise::Promise
@@ -92,34 +138,24 @@ mutable struct AsyncNode <: Node
 end
 
 Base.convert(::Type{Node}, p::Promise) = begin
-  w = task_local_storage(:window)
-  n = AsyncNode(p, true)
   @schedule try wait(p) catch e
     Base.showerror(STDERR, e)
   finally
-    if n.current
-      msg(w.sock, Dict(:command => "AsyncPromise",
-                       :id => object_id(p),
-                       :iserror => p.state == failed,
-                       :value => convert(Node, p.state == failed ? p.error : p.value)))
-    end
+    n.current && msg(ui, Dict(:command => "AsyncPromise",
+                              :id => object_id(p),
+                              :iserror => p.state == failed,
+                              :value => convert(Node, p.state == failed ? p.error : p.value)))
   end
-  n
+  ui = currentUI[] # deref here because we are using @dynamic! rather than @dynamic
+  n = AsyncNode(p, true)
 end
 
-Base.convert(::Type{DOM.Primitive}, a::AsyncNode) = begin
-  @dom [:div id=object_id(a.promise)]
-end
+Base.show(io::IO, m::MIME"application/json", a::AsyncNode) =
+  show(io, m, @dom [:div id=object_id(a.promise)])
 
-add_attr(a::AsyncNode, key::Symbol, value) = a
-diff(a::AsyncNode, b::AsyncNode) = begin
-  a.current = false
-  a.promise === b.promise && return Nullable{Patch}()
-  if isready(a.promise)
-    DOM.SetAttribute(:id, object_id(b.promise))
-  else
-    DOM.Replace(convert(Primitive, b))
-  end |> Nullable{Patch}
+DOM.add_attr(a::AsyncNode, key::Symbol, value) = a
+DOM.diff(a::AsyncNode, b::AsyncNode) = begin
+  a.current = false # avoid sending messages for out of date promises
+  a.promise === b.promise && return Nullable{DOM.Patch}()
+  DOM.Replace(b) |> Nullable{DOM.Patch}
 end
-
-export App, Window

@@ -2,12 +2,12 @@
 # This example just renders the most recent user event type as
 # a string. It demonstrates the round trip latency of the system
 #
-@require "github.com/jkroso/Cursor.jl" Cursor need
-@require "github.com/jkroso/DOM.jl" Container HTML @dom @css_str
-@require ".." App Window
+@require "github.com/jkroso/DOM.jl" HTML @dom @css_str
+@require "../stdlib" @patch
+@require ".." App window
 
-Base.convert(::Type{Container{:html}}, c::Cursor) = begin
-  change(e) = put!(c, e)
+window(App("Latency Example"), Text("Loading")) do e
+  change = @patch e -> e
   @dom [HTML css"""
              display: flex
              justify-content: space-around
@@ -16,7 +16,5 @@ Base.convert(::Type{Container{:html}}, c::Cursor) = begin
              onmousedown=change
              onmousemove=change
              onkeydown=change
-    [:pre repr(need(c))]]
-end
-
-Window(App("Latency Example"), Text("Loading")) |> wait
+    [:pre repr(e)]]
+end |> wait
