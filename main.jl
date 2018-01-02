@@ -63,6 +63,12 @@ mutable struct UI
   devices::Vector
   state::State
   UI(fn) = new(DOM.null_node, fn, [])
+  UI(fn, data) = begin
+    s = State(data, [])
+    ui = new(DOM.null_node, fn, [])
+    couple(ui, s)
+    ui
+  end
 end
 
 DOM.emit(ui::UI, e::Events.Event) =
@@ -72,6 +78,12 @@ DOM.emit(ui::UI, e::Events.Event) =
     DOM.emit(ui.view, e)
   end
 msg(ui::UI, data) = foreach(d->msg(d, data), ui.devices)
+
+"""
+Like display(a, b) but will also create any connections necessary in order 
+to make the displayed UI interactive
+"""
+couple(a, b) = display(a, b)
 
 """
 Connect a UI object with a State object so that when the state changes
