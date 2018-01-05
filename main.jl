@@ -1,4 +1,5 @@
-@require "github.com/jkroso/DOM.jl" => DOM Events Primitive Node @dom
+@require "github.com/MikeInnes/MacroTools.jl" => MacroTools @match @capture
+@require "github.com/jkroso/DOM.jl" => DOM Events Node Container @dom
 @require "github.com/jkroso/Promises.jl" Promise failed
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
 @require "github.com/jkroso/Electron.jl" App
@@ -53,6 +54,9 @@ end
 Base.wait(e::Window) = wait(e.loop)
 msg(a::Window, data) = msg(a.sock, data)
 
+const done_task = Task(identity)
+done_task.state = :done
+
 """
 An UI manages the presentation and manipulation of a State object. One UI
 can be displayed on multiple devices.
@@ -61,12 +65,12 @@ mutable struct UI
   view::Node
   render::Any # any callable object
   devices::Vector
+  display_task::Task
   state::State
-  UI(fn) = new(DOM.null_node, fn, [])
+  UI(fn) = new(DOM.null_node, fn, [], done_task)
   UI(fn, data) = begin
-    s = State(data, [])
-    ui = new(DOM.null_node, fn, [])
-    couple(ui, s)
+    ui = UI(fn)
+    couple(ui, State(data, []))
     ui
   end
 end
@@ -80,7 +84,7 @@ DOM.emit(ui::UI, e::Events.Event) =
 msg(ui::UI, data) = foreach(d->msg(d, data), ui.devices)
 
 """
-Like display(a, b) but will also create any connections necessary in order 
+Like display(a, b) but will also create any connections necessary in order
 to make the displayed UI interactive
 """
 couple(a, b) = display(a, b)
@@ -110,16 +114,19 @@ decouple(w::Window, ui::UI) = begin
   deleteat!(ui.devices, findfirst(ui.devices, w))
 end
 
-"Generate the view representation using UI's current state"
+"Generate a DOM view using the UI's current state"
 render(ui::UI) =
   @dynamic! let state = ui.state, currentUI = ui
     ui.render(need(ui.state))
   end
 
 Base.display(ui::UI) = begin
-  ui.view = render(ui)
-  for device in ui.devices
-    display(device, ui.view)
+  istaskdone(ui.display_task) || return
+  ui.display_task = @schedule begin
+    ui.view = render(ui)
+    for device in ui.devices
+      display(device, ui.view)
+    end
   end
 end
 
@@ -171,3 +178,45 @@ DOM.diff(a::AsyncNode, b::AsyncNode) = begin
   a.promise === b.promise && return Nullable{DOM.Patch}()
   DOM.Replace(b) |> Nullable{DOM.Patch}
 end
+
+"A UI chunk that has some ephemeral state associated with it"
+abstract type Component <: Node end
+
+"Define a new subtype of Component"
+macro component(name)
+  :(mutable struct $(esc(name)) <: Component
+    attrs::Associative
+    children::Vector
+    essential::Any
+    UI::Any
+    ephemeral::Any
+    view::Node
+    $(esc(name))(attrs, children) = new(attrs, children, state[], currentUI[])
+  end)
+end
+
+DOM.diff(a::T, b::T) where T<:Component = begin
+  b.ephemeral = a.ephemeral
+  DOM.diff(render(a), render(b))
+end
+
+default_data(::Component) = Dict()
+
+DOM.emit(c::Component, e) = DOM.emit(c.view, e)
+# needed by emit
+Base.convert(::Type{Container}, c::Component) = render(c)
+
+render(c::Component) = begin
+  isdefined(c, :view) && return c.view
+  isdefined(c, :ephemeral) || (c.ephemeral = default_data(c))
+  @dynamic! let state = c.essential, currentUI = c.UI
+    c.view = render(c, c.attrs, c.children)
+  end
+end
+
+set_state(c::Component, state) = begin
+  c.ephemeral = state
+  display(c.UI)
+end
+
+Base.show(io::IO, m::MIME, c::Component) = show(io, m, render(c))
