@@ -103,8 +103,9 @@ end
 
 gui(device, result) = UI(result->render(device, result), result)
 gui(device, result::UI) = result
-render(device, value) = render(value)
+gui(device, result::DOM.Node) = UI(identity, result)
 
+render(device, value) = render(value)
 render(x::Number) = @dom [:span class="syntax--constant syntax--numeric" repr(x)]
 render(x::AbstractString) = @dom [:span class="syntax--string syntax--quoted syntax--double" repr(x)]
 render(x::Module) = @dom [:span class="syntax--keyword syntax--other" repr(x)]
