@@ -185,13 +185,12 @@ abstract type Component <: Node end
 "Define a new subtype of Component"
 macro component(name)
   :(mutable struct $(esc(name)) <: Component
-    attrs::Associative
-    children::Vector
+    args::Any
     essential::Any
     UI::Any
     ephemeral::Any
     view::Node
-    $(esc(name))(attrs, children) = new(attrs, children, state[], currentUI[])
+    $(esc(name))(args...) = new(args, state[], currentUI[])
   end)
 end
 
@@ -210,7 +209,7 @@ render(c::Component) = begin
   isdefined(c, :view) && return c.view
   isdefined(c, :ephemeral) || (c.ephemeral = default_data(c))
   @dynamic! let state = c.essential, currentUI = c.UI
-    c.view = render(c, c.attrs, c.children)
+    c.view = render(c, c.args...)
   end
 end
 

@@ -113,35 +113,34 @@ render(x::Symbol) = @dom [:span class="syntax--constant syntax--other syntax--sy
 render(x::Char) = @dom [:span class="syntax--string syntax--quoted syntax--single" repr(x)]
 render(x::VersionNumber) = @dom [:span class="syntax--string syntax--quoted syntax--other" repr(x)]
 render(x::Void) = @dom [:span class="syntax--constant" repr(x)]
+render(v::AbstractVector) = expandable(v)
+render(dict::Associative) = expandable(dict)
 
-render(dict::Associative) =
-  @dom [Expandable
-    description(dict)
-    (@dom [:div css"display: flex"
-      render(key)
-      [:span css"padding: 0 10px" "→"]
-      render(value)]
-    for (key, value) in dict)...]
+body(dict::Associative) =
+  [@dom [:div css"display: flex"
+    render(key)
+    [:span css"padding: 0 10px" "→"]
+    render(value)]
+  for (key, value) in dict]
 
-render(v::AbstractVector) =
-  @dom [Expandable
-    description(v)
-    (@dom([:div render(x)]) for x in v)...]
+body(v::AbstractVector) = [@dom([:div render(x)]) for x in v]
 
 render(f::Function) =
-  @dom [Expandable
-    [:span class="syntax--support syntax--function" isanon(f) ? "λ" : string(typeof(f).name.mt.name)]
-    [:div css"""
+  Expandable(name(f)) do
+    @dom [:div css"""
           padding: 8px 0
           max-width: 800px
           white-space: normal
           h1 {font-size: 1.4em}
           pre {padding: 0}
           """
-      Atom.CodeTools.hasdoc(f) ? render(Base.doc(f)) : nothing]
+      Atom.CodeTools.hasdoc(f) ? render(Base.doc(f)) : @dom [:p "no docs"]
       render(methods(f))]
+  end
 
 isanon(f) = contains(string(f), "#")
+name(f::Function) = @dom [:span class="syntax--support syntax--function"
+                           isanon(f) ? "λ" : string(typeof(f).name.mt.name)]
 
 "render a chevron symbol that rotates down when open"
 chevron(open) =
@@ -153,45 +152,46 @@ chevron(open) =
               transition: transform 0.1s ease-out
               float: left
               width: 1em
+              margin-right: 4px
               """]
 
 "A summary of a datastructure"
-description(data) =
-  @dom [:span
-    [:span css"padding-left: 4px; font-weight: bold" repr(typeof(data))]
-    [:span css"color: rgb(104, 110, 122)" "[$(length(data))]"]]
+brief(data) = @dom [:span
+                     brief(typeof(data))
+                     [:span css"color: rgb(104, 110, 122)" "[$(length(data))]"]]
+brief(::Type{T}) where T = @dom [:span class="syntax--support syntax--type" repr(T)]
+
+expandable(data) = begin
+  isempty(data) && return brief(data)
+  Expandable(()->body(data), brief(data))
+end
 
 @component Expandable
 Rutherford.default_data(::Expandable) = false
-render(self::Expandable, attrs, children) = begin
-  @destruct [header, contents...] = children
-  @destruct open = self.ephemeral
-  isempty(contents) && return header
+render(self::Expandable, fn, header) = begin
+  open = self.ephemeral
   @dom [:div
     [:div onmousedown=e->Rutherford.set_state(self, !open)
       chevron(open)
       header]
-    [:div css"""
-          display: none
-          box-sizing: content-box
-          padding: 3px 0 3px 17px
-          &.open {display: block}
-          """
-          class.open=open
-      contents...]]
+    if open
+      @dom [:div css"padding: 3px 0 3px 17px" vcat(fn())...]
+    end]
 end
 
-render(T::DataType) = @dom [:span repr(T)]
+render(T::DataType) = brief(T)
 
 "By default just render the structure of the object"
-render(x) =
-  @dom [Expandable
-    render(typeof(x))
-    (@dom [:div css"display: flex"
+render(x) = structure(x)
+
+structure(x) =
+  Expandable(brief(typeof(x))) do
+    [@dom [:div css"display: flex"
       [:span string(field)]
       [:span css"padding: 0 10px" "→"]
       render(getfield(x, field))]
-     for field in fieldnames(x))...]
+     for field in fieldnames(x)]
+  end
 
 # Markdown is loose with its types so we need special functions `renderMD`
 render(md::Markdown.MD) =
@@ -288,12 +288,12 @@ render(e::Atom.EvalError) = begin
   head = strong(header[1])
   tail = strong(join(header[2:end], '\n'))
   if isempty(trace)
-    length(header) == 1 ? head : @dom [Expandable head tail]
+    length(header) == 1 ? head : Expandable((()->tail), head)
   else
-    @dom [Expandable
-      head
-      length(header) == 1 ? nothing : tail
-      render(trace)]
+    Expandable(head) do
+      [length(header) == 1 ? nothing : tail,
+       render(trace)]
+    end
   end
 end
 
@@ -336,18 +336,21 @@ interpose(xs, y) = map(i -> iseven(i) ? xs[i÷2] : y, 2:2length(xs))
 
 render(m::Method) = begin
   tv, decls, file, line = Base.arg_decl_parts(m)
-  params = [@dom [:span x isempty(T) ? "" : "::" [:strong stripparams(T)]]
+  params = [@dom [:span x isempty(T) ? "" : "::" [:span class="syntax--support syntax--type" stripparams(T)]]
             for (x, T) in decls[2:end]]
-  sig = @dom [:span string(m.name) "(" interpose(params, ", ")... ")"]
+  sig = @dom [:span name(m) "(" interpose(params, ", ")... ")"]
   link = file == :null ? "not found" : baselink(string(file), line)
   @dom [:span sig " at " link]
 end
 
+name(m::Base.MethodList) = @dom [:span class="syntax--support syntax--function" string(m.mt.name)]
+name(m::Method) = @dom [:span class="syntax--support syntax--function" string(m.name)]
+
 render(m::Base.MethodList) = begin
   ms = Juno.methodarray(m)
-  isempty(ms) && return @dom [:span "$(m.mt.name) has no methods."]
+  isempty(ms) && return @dom [:span name(m) " has no methods"]
   length(ms) == 1 && return render(ms[1])
-  @dom [Expandable
-    [:span [:span class="syntax--support syntax--function" string(m.mt.name)] " has $(length(ms)) methods:"]
-    (@dom([:div render(method)]) for method in ms)...]
+  Expandable(@dom [:span name(m) " has $(length(ms)) methods"]) do
+    [@dom([:div render(method)]) for method in ms]
+  end
 end
