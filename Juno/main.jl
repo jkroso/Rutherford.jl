@@ -108,12 +108,11 @@ gui(device, result::DOM.Node) = UI(identity, result)
 render(device, value) = render(value)
 render(x::Number) = @dom [:span class="syntax--constant syntax--numeric" repr(x)]
 render(x::AbstractString) = @dom [:span class="syntax--string syntax--quoted syntax--double" repr(x)]
-render(x::Module) = @dom [:span class="syntax--keyword syntax--other" repr(x)]
 render(x::Symbol) = @dom [:span class="syntax--constant syntax--other syntax--symbol" repr(x)]
 render(x::Char) = @dom [:span class="syntax--string syntax--quoted syntax--single" repr(x)]
 render(x::VersionNumber) = @dom [:span class="syntax--string syntax--quoted syntax--other" repr(x)]
 render(x::Void) = @dom [:span class="syntax--constant" repr(x)]
-render(v::AbstractVector) = expandable(v)
+render(v::Union{Tuple,AbstractVector}) = expandable(v)
 render(dict::Associative) = expandable(dict)
 
 body(dict::Associative) =
@@ -123,7 +122,18 @@ body(dict::Associative) =
     render(value)]
   for (key, value) in dict]
 
-body(v::AbstractVector) = [@dom([:div render(x)]) for x in v]
+body(v::Union{Tuple,AbstractVector}) = [@dom([:div render(x)]) for x in v]
+
+brief(x::Module) = @dom [:span class="syntax--keyword syntax--other" repr(x)]
+render(x::Module) =
+  Expandable(brief(x)) do
+    @dom [:div css"max-height: 500px"
+      (@dom [:div css"display: flex"
+        [:span string(name)]
+        [:span css"padding: 0 10px" "→"]
+        render(getfield(x, name))]
+      for name in names(x, true) if !contains(string(name), "#"))...]
+  end
 
 render(f::Function) =
   Expandable(name(f)) do
@@ -175,11 +185,28 @@ render(self::Expandable, fn, header) = begin
       chevron(open)
       header]
     if open
-      @dom [:div css"padding: 3px 0 3px 17px" vcat(fn())...]
+      @dom [:div css"padding: 3px 0 3px 20px" vcat(fn())...]
     end]
 end
 
-render(T::DataType) = brief(T)
+render(T::DataType) = begin
+  head = if supertype(T) ≠ Any
+    @dom [:span brief(T) " <: " brief(supertype(T))]
+  else
+    brief(T)
+  end
+  fields = fieldnames(T)
+  isempty(fields) && return head
+  Expandable(head) do
+    [@dom [:div css"display: flex"
+      [:span string(name)]
+      [:span "::"]
+      render(fieldtype(T, name))]
+    for name in fields]
+  end
+end
+
+render(x::UnionAll) = render(x.body)
 
 "By default just render the structure of the object"
 render(x) = structure(x)
