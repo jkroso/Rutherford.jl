@@ -28,6 +28,12 @@ Atom.handle("event") do id, data
   DOM.emit(ui, e)
 end
 
+Atom.handle("reset-module") do file
+  delete!(Kip.modules, file)
+  getmodule(file)
+  nothing
+end
+
 mutable struct Editor
   id::Int
   iserror::Bool

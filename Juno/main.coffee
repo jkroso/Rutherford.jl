@@ -8,6 +8,10 @@ atom.commands.add '.item-views > atom-text-editor',
     commands.withInk ->
       connection.boot()
       eval_block()
+  'julia-client:reset-module': (event) =>
+    connection.boot()
+    {edpath} = runtime.evaluation.currentContext()
+    connection.client.ipc.msg("reset-module", edpath)
 
 style = null
 connection.client.ipc.rpc('get-stylesheets').then (s) ->
