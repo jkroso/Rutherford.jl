@@ -147,7 +147,7 @@ getfile(m::Module) = begin
   for (file, mod) in Kip.modules
     mod === m && return file
   end
-  Pkg.dir(string(m))
+  joinpath(Pkg.dir(string(m)), "src", "$m.jl")
 end
 
 render(f::Function) =
