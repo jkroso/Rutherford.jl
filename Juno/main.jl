@@ -125,8 +125,9 @@ body(dict::Associative) =
 body(v::Union{Tuple,AbstractVector}) = [@dom([:div render(x)]) for x in v]
 
 brief(x::Module) = @dom [:span class="syntax--keyword syntax--other" repr(x)]
-render(x::Module) =
-  Expandable(brief(x)) do
+render(x::Module) = begin
+  file = getfile(x)
+  Expandable(@dom [:span brief(x) " from " baselink(file, 0)]) do
     @dom [:div css"max-height: 500px"
       (@dom [:div css"display: flex"
         [:span string(name)]
@@ -134,6 +135,14 @@ render(x::Module) =
         render(getfield(x, name))]
       for name in names(x, true) if !contains(string(name), "#"))...]
   end
+end
+
+getfile(m::Module) = begin
+  for (file, mod) in Kip.modules
+    mod === m && return file
+  end
+  Pkg.dir(string(m))
+end
 
 render(f::Function) =
   Expandable(name(f)) do
@@ -327,12 +336,20 @@ end
 fade(s) = @dom [:span class="fade" s]
 icon(x) = @dom [:span class="icon $("icon-$x")"]
 
+expandpath(path) = begin
+  isempty(path) && return (path, path)
+  path == "./missing" && return ("<unknown file>", path)
+  Atom.isuntitled(path) && return ("untitled", path)
+  !isabspath(path) && return (normpath(joinpath("base", path)), Atom.basepath(path))
+  ("./" * relpath(path, homedir()), path)
+end
+
 baselink(path, line) = begin
-  name, path = Atom.expandpath(path)
+  name, path = expandpath(path)
   if name == "<unkown file>"
-    fade("<unknown file>")
+    fade(name)
   else
-    @dom [:a onmousedown=e->open(path, line) Atom.appendline(name, line)]
+    @dom [:a onmousedown=e->(open(path, line); DOM.stop) Atom.appendline(name, line)]
   end
 end
 
