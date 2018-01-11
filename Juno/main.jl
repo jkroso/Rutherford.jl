@@ -191,12 +191,11 @@ expandable(data) = begin
   Expandable(()->body(data), brief(data))
 end
 
-@component Expandable
-Rutherford.default_data(::Expandable) = false
+@component Expandable(open=false)
 render(self::Expandable, fn, header) = begin
-  open = self.ephemeral
+  @destruct {open} = Rutherford.getstate(self)
   @dom [:div
-    [:div onmousedown=e->Rutherford.set_state(self, !open)
+    [:div onmousedown=e->Rutherford.setstate(self, :open, !open)
       chevron(open)
       header]
     if open

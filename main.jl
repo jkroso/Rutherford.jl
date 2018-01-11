@@ -1,4 +1,6 @@
 @require "github.com/MikeInnes/MacroTools.jl" => MacroTools @match @capture
+@require "github.com/jkroso/Prospects.jl/deftype" deftype
+@require "github.com/jkroso/Prospects.jl" assoc
 @require "github.com/jkroso/DOM.jl" => DOM Events Node Container @dom
 @require "github.com/jkroso/Promises.jl" Promise failed
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
@@ -183,15 +185,21 @@ end
 abstract type Component <: Node end
 
 "Define a new subtype of Component"
-macro component(name)
-  :(mutable struct $(esc(name)) <: Component
-    args::Any
-    essential::Any
-    UI::Any
-    ephemeral::Any
-    view::Node
-    $(esc(name))(args...) = new(args, state[], currentUI[])
-  end)
+macro component(expr)
+  @capture expr name_(args__)
+  state_name = Symbol(name, "State")
+  quote
+    $(deftype(:($state_name($(args...))), false))
+    default_state = $(esc(state_name))()
+    mutable struct $(esc(name)) <: Component
+      args::Any
+      essential::Any
+      UI::Any
+      ephemeral::$(esc(state_name))
+      view::Node
+      $(esc(name))(args...) = new(args, state[], currentUI[], default_state)
+    end
+  end
 end
 
 DOM.diff(a::T, b::T) where T<:Component = begin
@@ -199,21 +207,20 @@ DOM.diff(a::T, b::T) where T<:Component = begin
   DOM.diff(render(a), render(b))
 end
 
-default_data(::Component) = Dict()
-
 DOM.emit(c::Component, e) = DOM.emit(c.view, e)
 # needed by emit
 Base.convert(::Type{Container}, c::Component) = render(c)
 
 render(c::Component) = begin
   isdefined(c, :view) && return c.view
-  isdefined(c, :ephemeral) || (c.ephemeral = default_data(c))
   @dynamic! let state = c.essential, currentUI = c.UI
     c.view = render(c, c.args...)
   end
 end
 
-set_state(c::Component, state) = begin
+getstate(c::Component) = c.ephemeral
+setstate(c::Component, key, state) = setstate(c, assoc(getstate(c), key, state))
+setstate(c::Component, state) = begin
   c.ephemeral = state
   display(c.UI)
 end
