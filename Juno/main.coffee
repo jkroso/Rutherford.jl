@@ -13,9 +13,8 @@ atom.commands.add '.item-views > atom-text-editor',
     {edpath} = runtime.evaluation.currentContext()
     connection.client.ipc.msg("reset-module", edpath)
 
-style = null
-connection.client.ipc.rpc('get-stylesheets').then (s) ->
-  style = document.head.appendChild(DOM.create(s[0]))
+style = document.createElement('style')
+document.head.appendChild(style)
 
 connection.client.ipc.handle 'stylechange', (data) ->
   node = DOM.create(data)

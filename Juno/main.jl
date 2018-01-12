@@ -2,7 +2,6 @@
 @require "github.com/jkroso/DOM.jl" => DOM @dom @css_str
 @require "github.com/jkroso/Destructure.jl" @destruct
 @require "github.com/jkroso/write-json.jl"
-@require "github.com/jkroso/parse-json.jl"
 import CodeTools
 import Atom
 import Juno
@@ -10,13 +9,9 @@ import Juno
 # TODO: figure out why I need to buffer the JSON in a String before writing it
 msg(args...) = Atom.isactive(Atom.sock) && println(Atom.sock, stringmime("application/json", Any[args...]))
 
-Atom.handle("get-stylesheets") do
-  parse(MIME("application/json"), sprint(show, MIME("application/json"), DOM.stylesheets))
-end
-
 const UIs = Dict{Int32,Any}()
 
-event_parsers = Dict{String,Function}(
+const event_parsers = Dict{String,Function}(
   "mousedown" => d-> DOM.Events.MouseDown(d["path"], d["button"], d["position"]...),
   "mouseup" => d-> DOM.Events.MouseUp(d["path"], d["button"], d["position"]...),
   "keydown" => d-> DOM.Events.KeyDown(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
@@ -74,7 +69,7 @@ Atom.handle("myeval") do data
   end
 end
 
-lastsheet = DOM.stylesheets[1]
+lastsheet = DOM.CSSNode()
 
 Base.display(d::Editor, view::DOM.Node) = begin
   # update CSS if its stale
