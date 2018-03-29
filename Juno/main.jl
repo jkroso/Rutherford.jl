@@ -235,7 +235,7 @@ render(md::Markdown.MD) =
 renderMD(s::AbstractString) = @dom [:p s]
 renderMD(p::Markdown.Paragraph) = @dom [:p map(renderMDinline, vcat(p.content))...]
 renderMD(b::Markdown.BlockQuote) = @dom [:blockquote map(renderMD, vcat(p.content))...]
-renderMD(l::Markdown.LaTeX) = @dom [:latex class="latex block" block=true Juno.latex2katex(l.formula)]
+renderMD(l::Markdown.LaTeX) = @dom [:latex class="latex block" block=true Atom.latex2katex(l.formula)]
 renderMD(l::Markdown.Link) = @dom [:a href=l.url l.text]
 renderMD(md::Markdown.HorizontalRule) = @dom [:hr]
 
@@ -315,7 +315,7 @@ renderMDinline(code::Markdown.Code) =
     code.code]
 
 renderMDinline(md::Markdown.LaTeX) =
-  @dom [:latex class="latex inline" block=false Juno.latex2katex(md.formula)]
+  @dom [:latex class="latex inline" block=false Atom.latex2katex(md.formula)]
 
 render(e::Atom.EvalError) = begin
   strong(e) = @dom [:strong class="error-description" e]
@@ -391,7 +391,7 @@ name(m::Base.MethodList) = @dom [:span class="syntax--support syntax--function" 
 name(m::Method) = @dom [:span class="syntax--support syntax--function" string(m.name)]
 
 render(m::Base.MethodList) = begin
-  ms = Juno.methodarray(m)
+  ms = Atom.methodarray(m)
   isempty(ms) && return @dom [:span name(m) " has no methods"]
   length(ms) == 1 && return render(ms[1])
   Expandable(@dom [:span name(m) " has $(length(ms)) methods"]) do
