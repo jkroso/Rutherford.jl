@@ -319,10 +319,10 @@ renderMDinline(md::Markdown.LaTeX) =
 
 render(e::Atom.EvalError) = begin
   strong(e) = @dom [:strong class="error-description" e]
-  header = split(Juno.errmsg(e.err), '\n', keep=false)
+  header = split(sprint(showerror, e.err), '\n', keep=false)
   trace = Atom.cliptrace(Atom.errtrace(e))
-  head = strong(header[1])
-  tail = strong(join(header[2:end], '\n'))
+  head = strong(color(header[1]))
+  tail = color(join(header[2:end], '\n'))
   if isempty(trace)
     length(header) == 1 ? head : Expandable((()->tail), head)
   else
@@ -332,6 +332,40 @@ render(e::Atom.EvalError) = begin
     end
   end
 end
+
+"Handle ANSI color sequences"
+color(str) = begin
+  matches = eachmatch(r"\e\[(\d{2})m", str)|>collect
+  isempty(matches) && return @dom [:p str]
+  out = [@dom [:span class=colors[9] str[1:matches[1].offset-1]]]
+  for (i, current) in enumerate(matches)
+    start = current.offset+length(current.match)
+    cutoff = i == endof(matches) ? endof(str) : matches[i+1].offset-1
+    class = colors[parse(UInt8, current.captures[1]) - UInt8(30)]
+    text = str[start:cutoff]
+    push!(out, @dom [:span{class} text])
+  end
+  @dom [:p out...]
+end
+
+const colors = Dict{UInt8,String}([
+  0 => css"color: black",
+  1 => css"color: red",
+  2 => css"color: green",
+  3 => css"color: yellow",
+  4 => css"color: blue",
+  5 => css"color: magenta",
+  6 => css"color: cyan",
+  7 => css"color: white",
+  9 => css"color: lightgray",
+  60 => css"color: lightblack",
+  61 => css"color: #f96666",
+  62 => css"color: lightgreen",
+  63 => css"color: lightyellow",
+  64 => css"color: lightblue",
+  65 => css"color: lightmagenta",
+  66 => css"color: lightcyan",
+  67 => css"color: lightwhite"])
 
 fade(s) = @dom [:span class="fade" s]
 icon(x) = @dom [:span class="icon $("icon-$x")"]
