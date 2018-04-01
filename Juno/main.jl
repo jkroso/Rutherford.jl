@@ -1,4 +1,4 @@
-@require ".." => Rutherford UI render @component
+@require ".." => Rutherford UI msg render @component
 @require "github.com/jkroso/DOM.jl" => DOM @dom @css_str
 @require "github.com/jkroso/Destructure.jl" @destruct
 @require "github.com/jkroso/write-json.jl"
@@ -36,6 +36,8 @@ mutable struct Editor
   Editor(id, bool) = new(id, bool)
 end
 
+msg(e::Editor, data) = msg(data[:command], data)
+
 "Get the Module associated with the current file"
 getmodule(path) =
   get!(Kip.modules, path) do
@@ -48,7 +50,7 @@ getmodule(path) =
     mod
   end
 
-Atom.handle("myeval") do data
+Atom.handle("RutherfordEval") do data
   @destruct {"text"=>text, "line"=>line, "path"=>path, "id"=>id} = data
 
   lock(Atom.evallock)

@@ -1,12 +1,11 @@
 @require "github.com/MikeInnes/MacroTools.jl" => MacroTools @match @capture
+@require "github.com/jkroso/DOM.jl" => DOM Events Node Container Primitive @dom
 @require "github.com/jkroso/Prospects.jl/deftype" deftype
-@require "github.com/jkroso/Prospects.jl" assoc
-@require "github.com/jkroso/DOM.jl" => DOM Events Node Container @dom
-@require "github.com/jkroso/Promises.jl" Promise failed
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
+@require "github.com/jkroso/Prospects.jl" assoc
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/write-json.jl"
-@require "./State.jl" State Cursor need state
+@require "./State.jl" State need state
 
 @dynamic! currentUI = nothing
 const app_path = joinpath(@dirname(), "app")
@@ -153,32 +152,37 @@ window(a::App, ui::UI, state::State) = begin
   w
 end
 
-mutable struct AsyncNode <: Node
-  promise::Promise
-  current::Bool
-end
-
-Base.convert(::Type{Node}, p::Promise) = begin
-  @schedule try wait(p) catch e
-    Base.showerror(STDERR, e)
-  finally
-    n.current && msg(ui, Dict(:command => "AsyncPromise",
-                              :id => object_id(p),
-                              :iserror => p.state == failed,
-                              :value => convert(Node, p.state == failed ? p.error : p.value)))
-  end
+async(fn::Function, pending::Node; onerror=handle_async_error) = begin
   ui = currentUI[] # deref here because we are using @dynamic! rather than @dynamic
-  n = AsyncNode(p, true)
+  n = AsyncNode(true, pending, @schedule begin
+    view = try need(fn()) catch e onerror(e, ui, n) end
+    n.iscurrent && msg(ui, Dict(:command => "AsyncNode",
+                                :id => object_id(n),
+                                :value => view))
+    view
+  end)
 end
 
-Base.show(io::IO, m::MIME"application/json", a::AsyncNode) =
-  show(io, m, @dom [:div id=object_id(a.promise)])
+handle_async_error(e, _, __) = Base.showerror(STDERR, e)
+
+mutable struct AsyncNode <: Node
+  iscurrent::Bool
+  pending_view::Node
+  task::Task
+end
+
+Base.show(io::IO, m::MIME"application/json", a::AsyncNode) = show(io, m, convert(Primitive, a))
+Base.convert(::Type{Primitive}, a::AsyncNode) =
+  if istaskdone(a.task)
+    Base.task_result(a.task)
+  else
+    DOM.add_attr(a.pending_view, :id, object_id(a))
+  end
 
 DOM.add_attr(a::AsyncNode, key::Symbol, value) = a
 DOM.diff(a::AsyncNode, b::AsyncNode) = begin
-  a.current = false # avoid sending messages for out of date promises
-  a.promise === b.promise && return Nullable{DOM.Patch}()
-  DOM.Replace(b) |> Nullable{DOM.Patch}
+  a.iscurrent = false # avoid sending messages for out of date promises
+  DOM.diff(convert(Primitive, a), convert(Primitive, b))
 end
 
 "A UI chunk that has some ephemeral state associated with it"
