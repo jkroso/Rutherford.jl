@@ -2,19 +2,20 @@
 # This example just renders the most recent user event type as
 # a string. It demonstrates the round trip latency of the system
 #
-@require "github.com/jkroso/DOM.jl" HTML @dom @css_str
-@require "../stdlib" @patch
-@require ".." App window
+@require "github.com/jkroso/DOM.jl" @dom @css_str
+@require "github.com/jkroso/Rutherford.jl/stdlib" @patch
+@require "github.com/jkroso/Rutherford.jl" UI
 
-window(App("Latency Example"), Text("Loading")) do e
+UI(Text("Loading")) do e
   change = @patch e -> e
-  @dom [HTML css"""
+  @dom [:div css"""
              display: flex
              justify-content: space-around
              align-items: center
+             width: 100%
+             height: 100%
              """
              onmousedown=change
              onmousemove=change
-             onkeydown=change
     [:pre repr(e)]]
-end |> wait
+end

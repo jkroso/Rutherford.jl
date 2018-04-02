@@ -3,13 +3,13 @@
 # This enables you to generate complex content without locking up the UI
 # from further interactions
 #
+@require "github.com/jkroso/Rutherford.jl/stdlib" TextFeild scope
 @require "github.com/jkroso/DOM.jl" HTML @dom @css_str
-@require "../stdlib" TextFeild scope
-@require ".." async UI
+@require "github.com/jkroso/Rutherford.jl" async UI
 
 const pending = @dom [:div "Sleeping..."]
 
-main(data) =
+UI(Dict(:input=>Dict(:value=>"", :focused=>true))) do data
   @dom [:div css"""
              width: 500px
              display: flex
@@ -33,5 +33,4 @@ main(data) =
                  """
         data[:input][:value]]
     end]
-
-UI(main, Dict(:input => Dict(:value=>"", :focused=>true)))
+end

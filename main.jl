@@ -1,5 +1,5 @@
 @require "github.com/MikeInnes/MacroTools.jl" => MacroTools @match @capture
-@require "github.com/jkroso/DOM.jl" => DOM Events Node Container Primitive @dom
+@require "github.com/jkroso/DOM.jl" => DOM Events Node Container Primitive HTML @dom
 @require "github.com/jkroso/Prospects.jl/deftype" deftype
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
 @require "github.com/jkroso/Prospects.jl" assoc
@@ -46,7 +46,7 @@ Window(a::App; kwargs...) = begin
 
   # send events to the UI
   loop = @schedule for line in eachline(sock)
-    DOM.emit(w.UI, Events.parse_event(line))
+    DOM.emit(w, Events.parse_event(line))
   end
 
   w = Window(sock, initial_view, nothing, loop)
@@ -137,20 +137,15 @@ Base.display(w::Window, ui::UI) = begin
 end
 
 Base.display(w::Window, view::Node) = begin
-  patch = DOM.diff(w.view, view)
+  # wrap the view because DOM expects it to be a proper HTML document
+  wrapped = @dom [HTML view]
+  patch = DOM.diff(w.view, wrapped)
   isnull(patch) || msg(w, patch)
-  w.view = view
+  w.view = wrapped
   nothing
 end
 
-window(a::App, ui::UI, data) = window(a, ui, State(data, []))
-window(fn::Function, a::App, data) = window(a, UI(fn), data)
-window(a::App, ui::UI, state::State) = begin
-  w = Window(a)
-  couple(ui, state)
-  couple(w, ui)
-  w
-end
+DOM.emit(w::Window, e::Events.Event) = DOM.emit(w.view, e)
 
 async(fn::Function, pending::Node; onerror=handle_async_error) = begin
   ui = currentUI[] # deref here because we are using @dynamic! rather than @dynamic

@@ -2,10 +2,10 @@
 # This example is just a minimal Todo list. It's intended to show how
 # a typical app would operate over an immutable data structure
 #
+@require "github.com/jkroso/Rutherford.jl/stdlib" TextFeild @patch scope map_scope
+@require "github.com/jkroso/Rutherford.jl" UI
 @require "github.com/jkroso/Prospects.jl" unshift assoc_in assoc
-@require "github.com/jkroso/DOM.jl" HTML @dom @css_str
-@require "../stdlib" TextFeild @patch scope map_scope
-@require ".." App window
+@require "github.com/jkroso/DOM.jl" @dom @css_str
 
 struct Item
   title::String
@@ -39,6 +39,7 @@ render(item::Item) =
               font-size: 1.5em
               font-weight: lighter
               color: rgb(180,180,180)
+              outline: none
               &:hover
                 color: rgb(30,30,30)
             """
@@ -48,8 +49,8 @@ render(item::Item) =
    [:p item.title]
    [:button "×" :onclick=@patch delete!]]
 
-main(data) =
-  @dom [HTML css"display: flex; justify-content: space-around; align-items: center"
+UI(data) do data
+  @dom [:div css"display: flex; justify-content: space-around; align-items: center; width: 100%; height: 100%"
     [:div css"width: 500px; align-self: flex-start; margin-top: 100px; font-family: monospace"
       [scope(TextFeild, :input)
         css"""
@@ -67,18 +68,4 @@ main(data) =
         end]
       [:ul css"margin: 20px 0; border: 1px solid rgb(180,180,180)"
         map_scope(render, :items)...]]]
-
-const w = window(main, App("Todo List Example", version=v"1.7.10"), data)
-
-# If you want to develop this code interactively in Atom then just
-# uncomment this code and comment out the `wait(app)` below
-# let
-#   default_handler = Atom.handlers["eval"]
-#   Atom.handle("eval") do expr
-#     result = default_handler(expr)
-#     Base.invokelatest(display, w.UI)
-#     result
-#   end
-# end
-
-wait(w) # keeps the process open
+end
