@@ -14,8 +14,16 @@ const UIs = Dict{Int32,Any}()
 const event_parsers = Dict{String,Function}(
   "mousedown" => d-> DOM.Events.MouseDown(d["path"], d["button"], d["position"]...),
   "mouseup" => d-> DOM.Events.MouseUp(d["path"], d["button"], d["position"]...),
+  "mouseover" => d-> DOM.Events.MouseOver(d["path"]),
+  "mouseout" => d-> DOM.Events.MouseOut(d["path"]),
+  "click" => d-> DOM.Events.Click(d["path"], d["button"], d["position"]...),
+  "dblclick" => d-> DOM.Events.DoubleClick(d["path"], d["button"], d["position"]...),
+  "mousemove" => d-> DOM.Events.MouseMove(d["path"], d["position"]...),
   "keydown" => d-> DOM.Events.KeyDown(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
-  "keyup" => d-> DOM.Events.KeyUp(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))))
+  "keyup" => d-> DOM.Events.KeyUp(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
+  "keypress" => d-> DOM.Events.KeyPress(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
+  "resize" => d-> DOM.Events.Resize(d["width"], d["height"]),
+  "scroll" => d-> DOM.Events.Scroll(d["path"], d["position"]...))
 
 Atom.handle("event") do id, data
   ui = UIs[id]

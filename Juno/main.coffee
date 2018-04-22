@@ -43,6 +43,10 @@ mouse_button_event = (e, top_node) ->
   button: e.button
   position: [e.x, e.y]
 
+mouse_hover_event = (e, top_node) ->
+  type: e.type
+  path: dom_path(e.target, top_node)
+
 dom_path = (dom, top_node) ->
   indices = []
   return indices if not top_node.contains(dom)
@@ -60,8 +64,25 @@ indexOf = (dom) ->
 event_converters =
   keydown: keyboard_event
   keyup: keyboard_event
+  keypress: keyboard_event
+  click: mouse_button_event
+  dblclick: mouse_button_event
   mousedown: mouse_button_event
   mouseup: mouse_button_event
+  mouseover: mouse_hover_event
+  mouseout: mouse_hover_event
+  resize: (e) ->
+    type: "resize"
+    width: window.innerWidth
+    height: window.innerHeight
+  scroll: (e, top_node) ->
+    type: e.type
+    path: dom_path(e.target, top_node)
+    position: [window.scrollX, window.scrollY]
+  mousemove: (e, top_node) ->
+    type: e.type
+    path: dom_path(e.target, top_node)
+    position: [e.x, e.y]
 
 results = {}
 id = 0
@@ -86,8 +107,10 @@ connection.client.ipc.handle "render", ({type, dom, id}) ->
   r.setContent DOM.create(dom), {error: type == "error"}
   sendEvent = (e) ->
     connection.client.ipc.msg("event", id, eventJSON(e, r.view.view.lastElementChild))
+    e.stopPropagation()
+    e.preventDefault()
   for name of event_converters
-    r.view.view.addEventListener(name, sendEvent)
+    r.view.view.addEventListener(name, sendEvent, true)
   runtime.workspace.update()
 
 connection.client.ipc.handle "patch", ({id, patch}) ->
