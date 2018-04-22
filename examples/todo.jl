@@ -50,22 +50,30 @@ render(item::Item) =
    [:button "×" :onclick=@patch delete!]]
 
 UI(data) do data
-  @dom [:div css"display: flex; justify-content: space-around; align-items: center; width: 100%; height: 100%"
-    [:div css"width: 500px; align-self: flex-start; margin-top: 100px; font-family: monospace"
-      [scope(TextFeild, :input)
-        css"""
-        width: 100%
-        font: 2em/1.8em monospace
-        padding: 0 .8em
-        border-radius: 3px
-        border: 1px solid rgb(180,180,180)
-        """
-        placeholder="What needs doing?"
-        onsubmit=@patch txt -> begin
-          isempty(txt) && return
-          assoc_in(data, [:input :value] => "",
-                         [:items] => unshift(data[:items], Item(txt, false)))
-        end]
-      [:ul css"margin: 20px 0; border: 1px solid rgb(180,180,180)"
-        map_scope(render, :items)...]]]
+  @dom [:div css"""
+             display: flex
+             flex-direction: column
+             justify-content: space-around
+             align-items: center
+             width: 500px
+             align-self: flex-start
+             margin-top: 10px
+             font-family: monospace
+             """
+    [scope(TextFeild, :input)
+      css"""
+      width: 100%
+      font: 2em/1.8em monospace
+      padding: 0 .8em
+      border-radius: 3px
+      border: 1px solid rgb(180,180,180)
+      """
+      placeholder="What needs doing?"
+      onsubmit=@patch txt -> begin
+        isempty(txt) && return
+        assoc_in(data, [:input :value] => "",
+                       [:items] => unshift(data[:items], Item(txt, false)))
+      end]
+    [:ul css"margin: 20px 0; border: 1px solid rgb(180,180,180); padding: 0; width: 100%"
+      map_scope(render, :items)...]]
 end
