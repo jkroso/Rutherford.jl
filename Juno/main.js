@@ -129,6 +129,7 @@ const eval_block = () => {
 }
 
 var dock_item = null
+var node_to_focus = null
 const right_dock = atom.workspace.getRightDock()
 const right_pane = right_dock.getActivePane()
 
@@ -146,6 +147,15 @@ connection.client.ipc.handle("render", ({state, dom, id, location}) => {
         id
       })
       var top_node = item.parentNode
+      top_node.addEventListener("focusout", (e) => {
+        if (!right_pane.focused) node_to_focus = e.target
+      }, true)
+      top_node.addEventListener("mousedown", () => {
+        if (!right_pane.focused)  {
+          right_pane.activate()
+          node_to_focus && node_to_focus.focus()
+        }
+      }, true)
     } else {
       var tmp = dock_item.element.parentNode
       var top_node = tmp.cloneNode()
