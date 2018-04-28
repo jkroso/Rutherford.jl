@@ -28,9 +28,9 @@ render(item::Item) =
               border-top: none
             input
               margin: 10px
-            p
+            span
               flex-grow: 1
-            &.done p
+            &.done
               text-decoration: line-through
               color: rgb(180,180,180)
             button
@@ -46,18 +46,15 @@ render(item::Item) =
    [:input :type=:checkbox
            :checked=item.done
            :onclick=@patch assoc(item, :done, !item.done)]
-   [:p item.title]
+   [:span item.title]
    [:button "×" :onclick=@patch delete!]]
 
 UI(data) do data
   @dom [:div css"""
              display: flex
              flex-direction: column
-             justify-content: space-around
-             align-items: center
              width: 500px
-             align-self: flex-start
-             margin-top: 10px
+             margin: 10px
              font-family: monospace
              """
     [scope(TextFeild, :input)

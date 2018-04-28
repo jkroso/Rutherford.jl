@@ -31,20 +31,30 @@ Atom.handle("event") do id, data
   DOM.emit(ui, e)
 end
 
-Atom.handle("reset-module") do file
+Atom.handle("reset module") do file
   delete!(Kip.modules, file)
   getmodule(file)
   nothing
 end
 
-mutable struct Editor
+abstract type Device end
+
+mutable struct DockResult <: Device
   id::Int
-  iserror::Bool
-  view::Any
-  Editor(id, bool) = new(id, bool)
+  ui::Union{UI,Void}
+  view::DOM.Node
+  DockResult(id, ui) = new(id, ui)
 end
 
-msg(e::Editor, data) = msg(data[:command], data)
+mutable struct InlineResult <: Device
+  id::Int
+  result::Any
+  ui::Union{UI,Void}
+  view::DOM.Node
+  InlineResult(id, bool) = new(id, bool, nothing)
+end
+
+msg(::Device, data) = msg(data[:command], data)
 
 "Get the Module associated with the current file"
 getmodule(path) =
@@ -58,7 +68,9 @@ getmodule(path) =
     mod
   end
 
-Atom.handle("RutherfordEval") do data
+dockUI = 0
+
+Atom.handle("rutherford eval") do data
   @destruct {"text"=>text, "line"=>line, "path"=>path, "id"=>id} = data
 
   lock(Atom.evallock)
@@ -69,19 +81,28 @@ Atom.handle("RutherfordEval") do data
 
   if !Atom.ends_with_semicolon(text) || result isa Atom.EvalError
     Base.invokelatest() do
-      device = Editor(id, result isa Atom.EvalError)
+      Device = if result isa UI
+        global dockUI = id
+        DockResult
+      else
+        if dockUI != 0
+          display(UIs[dockUI])
+        end
+        InlineResult
+      end
+      device = Device(id, result)
       ui = gui(device, result)
       UIs[id] = ui
       Rutherford.couple(device, ui)
     end
   else
-    msg("render", Dict(:type=>"result", :id=>id, :dom=>icon("check")))
+    msg("render", Dict(:state=>"ok", :id=>id, :dom=>icon("check")))
   end
 end
 
 lastsheet = DOM.CSSNode()
 
-Base.display(d::Editor, view::DOM.Node) = begin
+Base.display(d::Device, view::DOM.Node) = begin
   # update CSS if its stale
   if DOM.stylesheets[1] != lastsheet
     global lastsheet = DOM.stylesheets[1]
@@ -91,24 +112,36 @@ Base.display(d::Editor, view::DOM.Node) = begin
     patch = DOM.diff(d.view, view)
     isnull(patch) || msg("patch", Dict(:id => d.id, :patch => patch))
   else
-    msg("render", Dict(:type => d.iserror ? "error" : "result",
+    msg("render", Dict(:state => device_state(d),
                        :id => d.id,
-                       :dom => view))
+                       :dom => view,
+                       :location => location(d)))
   end
   d.view = view
 end
 
-Rutherford.couple(i::Editor, ui::UI) = begin
-  push!(ui.devices, i)
-  display(i, ui)
+location(::InlineResult) = "inline"
+location(::DockResult) = "dock"
+device_state(::Device) = "ok"
+device_state(d::InlineResult) = d.result isa Atom.EvalError ? "error" : "ok"
+
+Rutherford.couple(device::Device, ui::UI) = begin
+  push!(ui.devices, device)
+  device.ui = ui
+  display(device, ui)
 end
 
-Base.display(d::Editor, ui::UI) = begin
+Rutherford.decouple(i::Device, ui::UI) = begin
+  deleteat!(ui.devices, findfirst((x->x === i), ui.devices))
+  i.ui = nothing
+end
+
+Base.display(d::Device, ui::UI) = begin
   ui.view = render(ui)
   display(d, ui.view)
 end
 
-Atom.handle("result-done") do id
+Atom.handle("result done") do id
   delete!(UIs, id)
 end
 
@@ -204,7 +237,7 @@ render(self::Expandable, fn, header) = begin
       chevron(open)
       header]
     if open
-      @dom [:div css"padding: 3px 0 3px 20px" vcat(fn())...]
+      @dom [:div css"padding: 3px 0 3px 20px; overflow: auto; max-height: 500px" vcat(fn())...]
     end]
 end
 
@@ -329,7 +362,7 @@ renderMDinline(md::Markdown.LaTeX) =
 
 render(e::Atom.EvalError) = begin
   strong(e) = @dom [:strong class="error-description" e]
-  header = split(sprint(showerror, e.err), '\n', keep=false)
+  header = split(sprint(showerror, e.err), '\n')
   trace = Atom.cliptrace(Atom.errtrace(e))
   head = strong(color(header[1]))
   tail = color(join(header[2:end], '\n'))
@@ -346,7 +379,7 @@ end
 "Handle ANSI color sequences"
 color(str) = begin
   matches = eachmatch(r"\e\[(\d{2})m", str)|>collect
-  isempty(matches) && return @dom [:p str]
+  isempty(matches) && return @dom [:span str]
   out = [@dom [:span class=colors[9] str[1:matches[1].offset-1]]]
   for (i, current) in enumerate(matches)
     start = current.offset+length(current.match)
