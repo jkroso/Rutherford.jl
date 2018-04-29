@@ -9,8 +9,6 @@ import Juno
 # TODO: figure out why I need to buffer the JSON in a String before writing it
 msg(args...) = Atom.isactive(Atom.sock) && println(Atom.sock, stringmime("application/json", Any[args...]))
 
-const UIs = Dict{Int32,Any}()
-
 const event_parsers = Dict{String,Function}(
   "mousedown" => d-> DOM.Events.MouseDown(d["path"], d["button"], d["position"]...),
   "mouseup" => d-> DOM.Events.MouseUp(d["path"], d["button"], d["position"]...),
@@ -26,9 +24,7 @@ const event_parsers = Dict{String,Function}(
   "scroll" => d-> DOM.Events.Scroll(d["path"], d["position"]...))
 
 Atom.handle("event") do id, data
-  ui = UIs[id]
-  e = event_parsers[data["type"]](data)
-  DOM.emit(ui, e)
+  DOM.emit(UIs[id], event_parsers[data["type"]](data))
 end
 
 Atom.handle("reset module") do file
@@ -37,21 +33,29 @@ Atom.handle("reset module") do file
   nothing
 end
 
+struct Snippet
+  text::String
+  line::Int32
+  path::String
+  id::Int32
+end
+
 abstract type Device end
 
 mutable struct DockResult <: Device
-  id::Int
+  snippet::Snippet
+  state::Symbol
   ui::Union{UI,Void}
   view::DOM.Node
-  DockResult(id, ui) = new(id, ui)
+  DockResult(s) = new(s, :ok)
 end
 
 mutable struct InlineResult <: Device
-  id::Int
-  result::Any
+  snippet::Snippet
+  state::Symbol
   ui::Union{UI,Void}
   view::DOM.Node
-  InlineResult(id, bool) = new(id, bool, nothing)
+  InlineResult(s) = new(s, :ok)
 end
 
 msg(::Device, data) = msg(data[:command], data)
@@ -68,35 +72,44 @@ getmodule(path) =
     mod
   end
 
-dockUI = 0
+global dock_result
+const inline_results = Dict{Int32,InlineResult}()
+const UIs = Dict{Int32,UI}()
+
+evaluate(s::Snippet) = begin
+  lock(Atom.evallock)
+  result = Atom.withpath(s.path) do
+    Atom.@errs include_string(getmodule(s.path), s.text, s.path, s.line)
+  end
+  unlock(Atom.evallock)
+  result
+end
+
+display_gui(d::Device, result) = begin
+  @destruct {text,id} = d.snippet
+  d.state = result isa Atom.EvalError ? :error : :ok
+  if Atom.ends_with_semicolon(text) && d.state == :ok
+    result = icon("check")
+  end
+  UIs[id] = gui(d, result)
+  Base.invokelatest(Rutherford.couple, d, UIs[id])
+end
 
 Atom.handle("rutherford eval") do data
   @destruct {"text"=>text, "line"=>line, "path"=>path, "id"=>id} = data
-
-  lock(Atom.evallock)
-  result = Atom.withpath(path) do
-    Atom.@errs include_string(getmodule(path), text, path, line)
-  end
-  unlock(Atom.evallock)
-
-  if !Atom.ends_with_semicolon(text) || result isa Atom.EvalError
-    Base.invokelatest() do
-      Device = if result isa UI
-        global dockUI = id
-        DockResult
-      else
-        if dockUI != 0
-          display(UIs[dockUI])
-        end
-        InlineResult
-      end
-      device = Device(id, result)
-      ui = gui(device, result)
-      UIs[id] = ui
-      Rutherford.couple(device, ui)
-    end
+  snippet = Snippet(text, line, path, id)
+  result = evaluate(snippet)
+  others = [(r, evaluate(r.snippet)) for r in values(inline_results) if r.snippet.line != line]
+  device = if result isa UI
+    global dock_result = DockResult(snippet)
   else
-    msg("render", Dict(:state=>"ok", :id=>id, :dom=>icon("check")))
+    isdefined(:dock_result) && Base.invokelatest(display, dock_result)
+    inline_results[id] = InlineResult(snippet)
+  end
+  Base.invokelatest(display_gui, device, result)
+  # redraw all other snippets
+  for (device, result) in others
+    Base.invokelatest(display_gui, device, result)
   end
 end
 
@@ -110,20 +123,15 @@ Base.display(d::Device, view::DOM.Node) = begin
   end
   if isdefined(d, :view)
     patch = DOM.diff(d.view, view)
-    isnull(patch) || msg("patch", Dict(:id => d.id, :patch => patch))
+    isnull(patch) || msg("patch", Dict(:id => d.snippet.id, :patch => patch, :state => d.state))
   else
-    msg("render", Dict(:state => device_state(d),
-                       :id => d.id,
-                       :dom => view,
-                       :location => location(d)))
+    msg("render", Dict(:state => d.state, :id => d.snippet.id, :dom => view, :location => location(d)))
   end
   d.view = view
 end
 
 location(::InlineResult) = "inline"
 location(::DockResult) = "dock"
-device_state(::Device) = "ok"
-device_state(d::InlineResult) = d.result isa Atom.EvalError ? "error" : "ok"
 
 Rutherford.couple(device::Device, ui::UI) = begin
   push!(ui.devices, device)
@@ -142,6 +150,7 @@ Base.display(d::Device, ui::UI) = begin
 end
 
 Atom.handle("result done") do id
+  delete!(inline_results, id)
   delete!(UIs, id)
 end
 

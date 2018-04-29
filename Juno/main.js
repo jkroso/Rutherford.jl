@@ -119,8 +119,8 @@ const eval_block = () => {
     results[id] = r
     const onDidDestroy = () => {
       if (!(_id in results)) return
-      connection.client.ipc.msg("result done", _id)
       delete results[_id]
+      connection.client.ipc.msg("result done", _id)
     }
     r.onDidDestroy(onDidDestroy)
     editor.onDidDestroy(onDidDestroy)
