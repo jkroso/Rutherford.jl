@@ -200,12 +200,13 @@ end
 render(f::Function) =
   Expandable(name(f)) do
     @dom [:div css"""
-          padding: 8px 0
-          max-width: 800px
-          white-space: normal
-          h1 {font-size: 1.4em}
-          pre {padding: 0}
-          """
+               padding: 8px 0
+               max-width: 800px
+               white-space: normal
+               h1 {font-size: 1.4em}
+               pre {padding: 0}
+               > div:last-child > div:last-child {overflow: visible}
+               """
       Atom.CodeTools.hasdoc(f) ? render(Base.doc(f)) : @dom [:p "no docs"]
       render(methods(f))]
   end

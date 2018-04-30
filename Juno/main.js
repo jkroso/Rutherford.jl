@@ -165,12 +165,26 @@ connection.client.ipc.handle("render", ({state, dom, id, location}) => {
     }
     results[id] = dock_item
   } else {
-    r.view.view.innerHTML = ""
-    r.view.view.classList.toggle("error", state == "error")
-    r.view.view.classList.remove("loading")
-    r.view.view.appendChild(DOM.create(dom))
-    r.view.toolbarView.classList.remove("hide")
     var top_node = r.view.view
+    top_node.innerHTML = ""
+    top_node.classList.toggle("error", state == "error")
+    top_node.classList.remove("loading")
+    top_node.appendChild(DOM.create(dom))
+    r.view.toolbarView.classList.remove("hide")
+    top_node.addEventListener("mousewheel", (e) => {
+      var node = e.target
+      while (node != top_node) {
+        if ((node.offsetHeight != node.scrollHeight || node.offsetWidth != node.scrollWidth) &&
+            ((e.deltaY > 0 && node.scrollHeight - node.scrollTop > node.clientHeight) ||
+             (e.deltaY < 0 && node.scrollTop > 0) ||
+             (e.deltaX > 0 && node.scrollWidth - node.scrollLeft > node.clientWidth) ||
+             (e.deltaX < 0 && node.scrollLeft > 0))) {
+          e.stopPropagation()
+          break
+        }
+        node = node.parentNode
+      }
+    }, true)
   }
   const sendEvent = (e) => {
     connection.client.ipc.msg("event", id, eventJSON(e, top_node.lastChild))
