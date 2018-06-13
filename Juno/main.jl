@@ -160,6 +160,18 @@ gui(device, result::DOM.Node) = UI(identity, result)
 
 render(device, value) = render(value)
 render(x::Number) = @dom [:span class="syntax--constant syntax--numeric" repr(x)]
+render(n::Union{AbstractFloat,Integer}) = @dom [:span class="syntax--constant syntax--numeric" seperate(n)]
+seperate(value::Number; kwargs...) = seperate(string(convert(Float64, value)), kwargs...)
+seperate(value::Integer; kwargs...) = seperate(string(value), kwargs...)
+seperate(str::String, sep = ",", k = 3) = begin
+  parts = split(str, '.')
+  str = parts[1]
+  n = length(str)
+  groups = (str[max(x-k+1, 1):x] for x in reverse(n:-k:1))
+  length(parts) == 1 && return join(groups, sep)
+  join([join(groups, sep), parts[2]], '.')
+end
+
 render(x::AbstractString) = @dom [:span class="syntax--string syntax--quoted syntax--double" repr(x)]
 render(x::Symbol) = @dom [:span class="syntax--constant syntax--other syntax--symbol" repr(x)]
 render(x::Char) = @dom [:span class="syntax--string syntax--quoted syntax--single" repr(x)]
