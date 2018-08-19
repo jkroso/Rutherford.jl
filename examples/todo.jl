@@ -18,31 +18,31 @@ const data = Dict(:input => Dict(:value=>"", :focused=>true),
                              Item("Write todo example", true)])
 
 render(item::Item) =
- @dom [:div class.done=item.done
-            css"""
-            display: flex
-            align-items: center
-            padding: 10px
-            border-top: 1px solid rgb(180,180,180)
-            &:first-child
-              border-top: none
-            input
-              margin: 10px
-            span
-              flex-grow: 1
-            &.done
-              text-decoration: line-through
-              color: rgb(180,180,180)
-            button
-              border: none
-              background: none
-              font-size: 1.5em
-              font-weight: lighter
-              color: rgb(180,180,180)
-              outline: none
-              &:hover
-                color: rgb(30,30,30)
-            """
+ @dom[:div class.done=item.done
+           css"""
+           display: flex
+           align-items: center
+           padding: 10px
+           border-top: 1px solid rgb(180,180,180)
+           &:first-child
+             border-top: none
+           input
+             margin: 10px
+           span
+             flex-grow: 1
+           &.done
+             text-decoration: line-through
+             color: rgb(180,180,180)
+           button
+             border: none
+             background: none
+             font-size: 1.5em
+             font-weight: lighter
+             color: rgb(180,180,180)
+             outline: none
+             &:hover
+               color: rgb(30,30,30)
+           """
    [:input :type=:checkbox
            :checked=item.done
            :onclick=@patch assoc(item, :done, !item.done)]
@@ -50,13 +50,13 @@ render(item::Item) =
    [:button "×" :onclick=@patch delete!]]
 
 UI(data) do data
-  @dom [:div css"""
-             display: flex
-             flex-direction: column
-             width: 500px
-             margin: 10px
-             font-family: monospace
-             """
+  @dom[:div css"""
+            display: flex
+            flex-direction: column
+            width: 500px
+            margin: 10px
+            font-family: monospace
+            """
     [scope(TextFeild, :input)
       css"""
       width: 100%

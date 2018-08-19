@@ -7,13 +7,8 @@
 @CLI (file::String; version::VersionNumber=latest())
 
 const path = joinpath(pwd(), file)
-const mod = Module(Symbol(:⭒, file))
-
-const ui = eval(mod, Expr(:toplevel,
-                          :(using Kip),
-                          :(eval(x) = Main.Core.eval($mod, x)),
-                          :(eval(m, x) = Main.Core.eval(m, x)),
-                          :(include($path))))
+const mod = @eval module $(Symbol(:⭒, file)) using Kip end
+const ui = Core.eval(mod, :(include($path)))
 
 const window = Window(App(file, version=version))
 couple(window, ui)

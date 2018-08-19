@@ -1,27 +1,28 @@
 @require ".." => Rutherford UI msg render @component
-@require "github.com/jkroso/DOM.jl" => DOM @dom @css_str
+@require "github.com/jkroso/DOM.jl" => DOM Events @dom @css_str
+@require "github.com/JunoLab/CodeTools.jl" => CodeTools
 @require "github.com/jkroso/Destructure.jl" @destruct
+@require "github.com/JunoLab/Atom.jl" => Atom
+@require "github.com/JunoLab/Juno.jl" => Juno
 @require "github.com/jkroso/write-json.jl"
-import CodeTools
-import Atom
-import Juno
+using Markdown
 
 # TODO: figure out why I need to buffer the JSON in a String before writing it
-msg(args...) = Atom.isactive(Atom.sock) && println(Atom.sock, stringmime("application/json", Any[args...]))
+msg(args...) = Atom.isactive(Atom.sock) && println(Atom.sock, repr("application/json", Any[args...]))
 
 const event_parsers = Dict{String,Function}(
-  "mousedown" => d-> DOM.Events.MouseDown(d["path"], d["button"], d["position"]...),
-  "mouseup" => d-> DOM.Events.MouseUp(d["path"], d["button"], d["position"]...),
-  "mouseover" => d-> DOM.Events.MouseOver(d["path"]),
-  "mouseout" => d-> DOM.Events.MouseOut(d["path"]),
-  "click" => d-> DOM.Events.Click(d["path"], d["button"], d["position"]...),
-  "dblclick" => d-> DOM.Events.DoubleClick(d["path"], d["button"], d["position"]...),
-  "mousemove" => d-> DOM.Events.MouseMove(d["path"], d["position"]...),
-  "keydown" => d-> DOM.Events.KeyDown(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
-  "keyup" => d-> DOM.Events.KeyUp(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
-  "keypress" => d-> DOM.Events.KeyPress(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
-  "resize" => d-> DOM.Events.Resize(d["width"], d["height"]),
-  "scroll" => d-> DOM.Events.Scroll(d["path"], d["position"]...))
+  "mousedown" => d-> Events.MouseDown(d["path"], Events.MouseButton(d["button"]), d["position"]...),
+  "mouseup" => d-> Events.MouseUp(d["path"], Events.MouseButton(d["button"]), d["position"]...),
+  "mouseover" => d-> Events.MouseOver(d["path"]),
+  "mouseout" => d-> Events.MouseOut(d["path"]),
+  "click" => d-> Events.Click(d["path"], Events.MouseButton(d["button"]), d["position"]...),
+  "dblclick" => d-> Events.DoubleClick(d["path"], Events.MouseButton(d["button"]), d["position"]...),
+  "mousemove" => d-> Events.MouseMove(d["path"], d["position"]...),
+  "keydown" => d-> Events.KeyDown(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
+  "keyup" => d-> Events.KeyUp(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
+  "keypress" => d-> Events.KeyPress(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
+  "resize" => d-> Events.Resize(d["width"], d["height"]),
+  "scroll" => d-> Events.Scroll(d["path"], d["position"]...))
 
 Atom.handle("event") do id, data
   DOM.emit(UIs[id], event_parsers[data["type"]](data))
@@ -45,7 +46,7 @@ abstract type Device end
 mutable struct DockResult <: Device
   snippet::Snippet
   state::Symbol
-  ui::Union{UI,Void}
+  ui::Union{UI,Nothing}
   view::DOM.Node
   DockResult(s) = new(s, :ok)
 end
@@ -53,7 +54,7 @@ end
 mutable struct InlineResult <: Device
   snippet::Snippet
   state::Symbol
-  ui::Union{UI,Void}
+  ui::Union{UI,Nothing}
   view::DOM.Node
   InlineResult(s) = new(s, :ok)
 end
@@ -63,13 +64,7 @@ msg(::Device, data) = msg(data[:command], data)
 "Get the Module associated with the current file"
 getmodule(path) =
   get!(Kip.modules, path) do
-    name = Kip.pkgname(path)
-    mod = Module(Symbol(:⭒, name))
-    eval(mod, Expr(:toplevel,
-                   :(using Kip),
-                   :(eval(x) = Main.Core.eval($mod, x)),
-                   :(eval(m, x) = Main.Core.eval(m, x))))
-    mod
+    @eval Main module $(Symbol(:⭒, Kip.pkgname(path))) using Kip end
   end
 
 global dock_result
@@ -103,7 +98,7 @@ Atom.handle("rutherford eval") do data
   device = if result isa UI
     global dock_result = DockResult(snippet)
   else
-    isdefined(:dock_result) && Base.invokelatest(display, dock_result)
+    @isdefined(dock_result) && Base.invokelatest(display, dock_result)
     inline_results[id] = InlineResult(snippet)
   end
   Base.invokelatest(display_gui, device, result)
@@ -123,7 +118,7 @@ Base.display(d::Device, view::DOM.Node) = begin
   end
   if isdefined(d, :view)
     patch = DOM.diff(d.view, view)
-    isnull(patch) || msg("patch", Dict(:id => d.snippet.id, :patch => patch, :state => d.state))
+    patch == nothing || msg("patch", Dict(:id => d.snippet.id, :patch => patch, :state => d.state))
   else
     msg("render", Dict(:state => d.state, :id => d.snippet.id, :dom => view, :location => location(d)))
   end
@@ -159,9 +154,9 @@ gui(device, result::UI) = result
 gui(device, result::DOM.Node) = UI(identity, result)
 
 render(device, value) = render(value)
-render(x::Number) = @dom [:span class="syntax--constant syntax--numeric" repr(x)]
-render(n::Union{AbstractFloat,Integer}) = @dom [:span class="syntax--constant syntax--numeric" seperate(n)]
-render(n::Bool) = @dom [:span class="syntax--constant syntax--boolean" string(n)]
+render(x::Number) = @dom[:span class="syntax--constant syntax--numeric" repr(x)]
+render(n::Union{AbstractFloat,Integer}) = @dom[:span class="syntax--constant syntax--numeric" seperate(n)]
+render(n::Bool) = @dom[:span class="syntax--constant syntax--boolean" string(n)]
 seperate(value::Number; kwargs...) = seperate(string(convert(Float64, value)), kwargs...)
 seperate(value::Integer; kwargs...) = seperate(string(value), kwargs...)
 seperate(str::String, sep = ",", k = 3) = begin
@@ -173,79 +168,83 @@ seperate(str::String, sep = ",", k = 3) = begin
   join([join(groups, sep), parts[2]], '.')
 end
 
-render(x::AbstractString) = @dom [:span class="syntax--string syntax--quoted syntax--double" repr(x)]
-render(x::Symbol) = @dom [:span class="syntax--constant syntax--other syntax--symbol" repr(x)]
-render(x::Char) = @dom [:span class="syntax--string syntax--quoted syntax--single" repr(x)]
-render(x::VersionNumber) = @dom [:span class="syntax--string syntax--quoted syntax--other" repr(x)]
-render(x::Void) = @dom [:span class="syntax--constant" repr(x)]
+render(x::AbstractString) = @dom[:span class="syntax--string syntax--quoted syntax--double" repr(x)]
+render(r::Regex) = @dom [:span class="syntax--string syntax--regexp" repr(r)]
+render(x::Symbol) = @dom[:span class="syntax--constant syntax--other syntax--symbol" repr(x)]
+render(x::Char) = @dom[:span class="syntax--string syntax--quoted syntax--single" repr(x)]
+render(x::VersionNumber) = @dom[:span class="syntax--string syntax--quoted syntax--other" repr(x)]
+render(x::Nothing) = @dom[:span class="syntax--constant" repr(x)]
 render(v::Union{Tuple,AbstractVector}) = expandable(v)
-render(dict::Associative) = expandable(dict)
+render(dict::AbstractDict) = expandable(dict)
 
-body(dict::Associative) =
-  [@dom [:div css"display: flex"
+body(dict::AbstractDict) =
+  [@dom[:div css"display: flex"
     render(key)
     [:span css"padding: 0 10px" "→"]
     render(value)]
   for (key, value) in dict]
 
-body(v::Union{Tuple,AbstractVector}) = [@dom([:div render(x)]) for x in v]
+body(v::Union{Tuple,AbstractVector}) = [@dom[:div render(x)] for x in v]
 
-brief(x::Module) = @dom [:span class="syntax--keyword syntax--other" repr(x)]
+brief(x::Module) = @dom[:span class="syntax--keyword syntax--other" replace(repr(x), r"^Main\."=>"")]
 render(x::Module) = begin
   file = getfile(x)
-  Expandable(@dom [:span brief(x) " from " baselink(file, 0)]) do
-    @dom [:div css"max-height: 500px"
-      (@dom [:div css"display: flex"
+  Expandable(@dom[:span brief(x) " from " stacklink(file, 0)]) do
+    @dom[:div css"max-height: 500px"
+      (@dom[:div css"display: flex"
         [:span string(name)]
         [:span css"padding: 0 10px" "→"]
-        render(getfield(x, name))]
-      for name in names(x, true) if !contains(string(name), "#"))...]
+        isdefined(x, name) ? render(getfield(x, name)) : fade("#undef")]
+      for name in names(x, all=true) if !occursin('#', String(name)))...]
   end
 end
 
 getfile(m::Module) = begin
+  if pathof(m) != nothing
+    return pathof(m)
+  end
   for (file, mod) in Kip.modules
     mod === m && return file
   end
-  joinpath(Pkg.dir(string(m)), "src", "$m.jl")
 end
 
 render(f::Function) =
   Expandable(name(f)) do
-    @dom [:div css"""
-               padding: 8px 0
-               max-width: 800px
-               white-space: normal
-               h1 {font-size: 1.4em}
-               pre {padding: 0}
-               > div:last-child > div:last-child {overflow: visible}
-               """
-      Atom.CodeTools.hasdoc(f) ? render(Base.doc(f)) : @dom [:p "no docs"]
+    @dom[:div css"""
+              padding: 8px 0
+              max-width: 800px
+              white-space: normal
+              h1 {font-size: 1.4em}
+              pre {padding: 0}
+              > div:last-child > div:last-child {overflow: visible}
+              """
+      Atom.CodeTools.hasdoc(f) ? render(Base.doc(f)) : @dom[:p "no docs"]
       render(methods(f))]
   end
 
-isanon(f) = contains(string(f), "#")
-name(f::Function) = @dom [:span class="syntax--support syntax--function"
-                           isanon(f) ? "λ" : string(typeof(f).name.mt.name)]
+isanon(f) = occursin('#', String(nameof(f)))
+name(f::Function) = @dom[:span class="syntax--support syntax--function"
+                          isanon(f) ? "λ" : String(nameof(f))]
 
 "render a chevron symbol that rotates down when open"
 chevron(open) =
-  @dom [:span class.open=open
-              class="icon-chevron-right"
-              css"""
-              &.open {transform: rotate(0.25turn)}
-              text-align: center
-              transition: transform 0.1s ease-out
-              float: left
-              width: 1em
-              margin-right: 4px
-              """]
+  @dom[:span class.open=open
+             class="icon-chevron-right"
+             css"""
+             &.open {transform: rotate(0.25turn)}
+             text-align: center
+             transition: transform 0.1s ease-out
+             float: left
+             width: 1em
+             margin-right: 4px
+             """]
 
 "A summary of a datastructure"
-brief(data) = @dom [:span
-                     brief(typeof(data))
-                     [:span css"color: rgb(104, 110, 122)" "[$(length(data))]"]]
-brief(::Type{T}) where T = @dom [:span class="syntax--support syntax--type" repr(T)]
+brief(data) =
+  @dom[:span
+    brief(typeof(data))
+    [:span css"color: rgb(104, 110, 122)" "[$(length(data))]"]]
+brief(T::DataType) = @dom[:span class="syntax--support syntax--type" repr(T)]
 
 expandable(data) = begin
   isempty(data) && return brief(data)
@@ -255,25 +254,25 @@ end
 @component Expandable(open=false)
 render(self::Expandable, fn, header) = begin
   @destruct {open} = Rutherford.getstate(self)
-  @dom [:div
+  @dom[:div
     [:div onmousedown=e->Rutherford.setstate(self, :open, !open)
       chevron(open)
       header]
     if open
-      @dom [:div css"padding: 3px 0 3px 20px; overflow: auto; max-height: 500px" vcat(fn())...]
+      @dom[:div css"padding: 3px 0 3px 20px; overflow: auto; max-height: 500px" vcat(fn())...]
     end]
 end
 
 render(T::DataType) = begin
   head = if supertype(T) ≠ Any
-    @dom [:span brief(T) " <: " brief(supertype(T))]
+    @dom[:span brief(T) " <: " brief(supertype(T))]
   else
     brief(T)
   end
-  fields = fieldnames(T)
+  fields = try fieldnames(T) catch; () end
   isempty(fields) && return head
   Expandable(head) do
-    [@dom [:div css"display: flex"
+    [@dom[:div css"display: flex"
       [:span string(name)]
       [:span "::"]
       render(fieldtype(T, name))]
@@ -286,48 +285,52 @@ render(x::UnionAll) = render(x.body)
 "By default just render the structure of the object"
 render(x) = structure(x)
 
-structure(x) =
-  Expandable(brief(typeof(x))) do
-    [@dom [:div css"display: flex"
+structure(x) = begin
+  head = brief(typeof(x))
+  fields = try fieldnames(typeof(x)) catch; () end
+  isempty(fields) && return head
+  Expandable(head) do
+    [@dom[:div css"display: flex"
       [:span string(field)]
       [:span css"padding: 0 10px" "→"]
       render(getfield(x, field))]
-     for field in fieldnames(x)]
+     for field in fields]
   end
+end
 
 # Markdown is loose with its types so we need special functions `renderMD`
 render(md::Markdown.MD) =
-  @dom [:div class="markdown" map(renderMD, CodeTools.flatten(md).content)...]
-renderMD(s::AbstractString) = @dom [:p s]
-renderMD(p::Markdown.Paragraph) = @dom [:p map(renderMDinline, vcat(p.content))...]
-renderMD(b::Markdown.BlockQuote) = @dom [:blockquote map(renderMD, vcat(p.content))...]
-renderMD(l::Markdown.LaTeX) = @dom [:latex class="latex block" block=true Atom.latex2katex(l.formula)]
-renderMD(l::Markdown.Link) = @dom [:a href=l.url l.text]
-renderMD(md::Markdown.HorizontalRule) = @dom [:hr]
+  @dom[:div class="markdown" map(renderMD, CodeTools.flatten(md).content)...]
+renderMD(s::AbstractString) = @dom[:p s]
+renderMD(p::Markdown.Paragraph) = @dom[:p map(renderMDinline, vcat(p.content))...]
+renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, vcat(p.content))...]
+renderMD(l::Markdown.LaTeX) = @dom[:latex class="latex block" block=true Atom.latex2katex(l.formula)]
+renderMD(l::Markdown.Link) = @dom[:a href=l.url l.text]
+renderMD(md::Markdown.HorizontalRule) = @dom[:hr]
 
 renderMD(h::Markdown.Header{l}) where l =
   DOM.Container{Symbol(:h, l)}(DOM.Attrs(), map(renderMDinline, vcat(h.text)))
 
 renderMD(c::Markdown.Code) =
-  @dom [:pre
+  @dom[:pre
     [:code class=isempty(c.language) ? "julia" : c.language
            block=true
       c.code]]
 
 renderMD(f::Markdown.Footnote) =
-  @dom [:div class="footnote" id="footnote-$(f.id)"
+  @dom[:div class="footnote" id="footnote-$(f.id)"
     [:p class="footnote-title" f.id]
     renderMD(f.text)]
 
 renderMD(md::Markdown.Admonition) =
-  @dom [:div class="admonition $(md.category)"
+  @dom[:div class="admonition $(md.category)"
     [:p class="admonition-title $(md.category == "warning" ? "icon-alert" : "icon-info")" md.title]
     renderMD(md.content)]
 
 renderMD(md::Markdown.List) =
   DOM.Container{Markdown.isordered(md) ? :ol : :ul}(
     DOM.Attrs(:start=>md.ordered > 1 ? string(md.ordered) : ""),
-    [@dom([:li renderMDinline(item)]) for item in md.items])
+    [@dom[:li renderMDinline(item)] for item in md.items])
 
 renderMD(md::Markdown.Table) = begin
   align = map(md.align) do s
@@ -335,59 +338,58 @@ renderMD(md::Markdown.Table) = begin
     s == :r && return "right"
     s == :l && return "left"
   end
-  @dom [:table css"""
-               border-collapse: collapse
-               border-spacing: 0
-               empty-cells: show
-               border: 1px solid #cbcbcb
-               > thead
-                 background-color: #e0e0e0
-                 color: #000
-                 vertical-align: bottom
-               > thead > tr > th, > tbody > tr > td
-                 font-size: inherit
-                 margin: 0
-                 overflow: visible
-                 padding: 0.5em 1em
-                 border-width: 0 0 1px 0
-               > tbody > tr:last-child > td
-                 border-bottom-width: 0
-               """
+  @dom[:table css"""
+              border-collapse: collapse
+              border-spacing: 0
+              empty-cells: show
+              border: 1px solid #cbcbcb
+              > thead
+                background-color: #e0e0e0
+                color: #000
+                vertical-align: bottom
+              > thead > tr > th, > tbody > tr > td
+                font-size: inherit
+                margin: 0
+                overflow: visible
+                padding: 0.5em 1em
+                border-width: 0 0 1px 0
+              > tbody > tr:last-child > td
+                border-bottom-width: 0
+              """
     [:thead
-      [:tr (@dom([:th align=align[i] renderMDinline(column)])
+      [:tr (@dom[:th align=align[i] renderMDinline(column)]
             for (i, column) in enumerate(md.rows[1]))...]]
     [:tbody
       map(md.rows[2:end]) do row
-        @dom [:tr (@dom([:td align=align[i] renderMDinline(column)])
-                   for (i, column) in enumerate(row))...]
+        @dom[:tr (@dom[:td align=align[i] renderMDinline(column)]
+                  for (i, column) in enumerate(row))...]
       end...]]
 end
 
 renderMDinline(v::Vector) =
-  length(v) == 1 ? renderMDinline(v[1]) : @dom [:span map(renderMDinline, v)...]
+  length(v) == 1 ? renderMDinline(v[1]) : @dom[:span map(renderMDinline, v)...]
 renderMDinline(md::Union{Symbol,AbstractString}) = DOM.Text(string(md))
-renderMDinline(md::Markdown.Bold) = @dom [:b renderMDinline(md.text)]
-renderMDinline(md::Markdown.Italic) = @dom [:em renderMDinline(md.text)]
-renderMDinline(md::Markdown.Image) = @dom [:img src=md.url alt=md.alt]
-renderMDinline(l::Markdown.Link) = @dom [:a href=l.url renderMDinline(l.text)]
-renderMDinline(br::Markdown.LineBreak) = @dom [:br]
+renderMDinline(md::Markdown.Bold) = @dom[:b renderMDinline(md.text)]
+renderMDinline(md::Markdown.Italic) = @dom[:em renderMDinline(md.text)]
+renderMDinline(md::Markdown.Image) = @dom[:img src=md.url alt=md.alt]
+renderMDinline(l::Markdown.Link) = @dom[:a href=l.url renderMDinline(l.text)]
+renderMDinline(br::Markdown.LineBreak) = @dom[:br]
 
 renderMDinline(f::Markdown.Footnote) =
-  @dom [:a href="#footnote-$(f.id)" class="footnote" [:span "[$(f.id)]"]]
+  @dom[:a href="#footnote-$(f.id)" class="footnote" [:span "[$(f.id)]"]]
 
 renderMDinline(code::Markdown.Code) =
-  @dom [:code class=isempty(code.language) ? "julia" : code.language
-              block=false
+  @dom[:code class=isempty(code.language) ? "julia" : code.language
+             block=false
     code.code]
 
 renderMDinline(md::Markdown.LaTeX) =
-  @dom [:latex class="latex inline" block=false Atom.latex2katex(md.formula)]
+  @dom[:latex class="latex inline" block=false Atom.latex2katex(md.formula)]
 
 render(e::Atom.EvalError) = begin
-  strong(e) = @dom [:strong class="error-description" e]
   header = split(sprint(showerror, e.err), '\n')
   trace = Atom.cliptrace(Atom.errtrace(e))
-  head = strong(color(header[1]))
+  head = @dom[:strong class="error-description" color(header[1])]
   tail = color(join(header[2:end], '\n'))
   if isempty(trace)
     length(header) == 1 ? head : Expandable((()->tail), head)
@@ -402,19 +404,19 @@ end
 "Handle ANSI color sequences"
 color(str) = begin
   matches = eachmatch(r"\e\[(\d{2})m", str)|>collect
-  isempty(matches) && return @dom [:span str]
-  out = [@dom [:span class=colors[9] str[1:matches[1].offset-1]]]
+  isempty(matches) && return @dom[:span str]
+  out = [@dom[:span class=colors[9] str[1:matches[1].offset-1]]]
   for (i, current) in enumerate(matches)
     start = current.offset+length(current.match)
     cutoff = i == endof(matches) ? endof(str) : matches[i+1].offset-1
     class = colors[parse(UInt8, current.captures[1]) - UInt8(30)]
     text = str[start:cutoff]
-    push!(out, @dom [:span{class} text])
+    push!(out, @dom[:span{class} text])
   end
-  @dom [:p out...]
+  @dom[:p out...]
 end
 
-const colors = Dict{UInt8,String}([
+const colors = Dict{UInt8,Symbol}([
   0 => css"color: black",
   1 => css"color: red",
   2 => css"color: green",
@@ -433,68 +435,65 @@ const colors = Dict{UInt8,String}([
   66 => css"color: lightcyan",
   67 => css"color: lightwhite"])
 
-fade(s) = @dom [:span class="fade" s]
-icon(x) = @dom [:span class="icon $("icon-$x")"]
+fade(s) = @dom[:span class="fade" s]
+icon(x) = @dom[:span class="icon $("icon-$x")"]
 
 expandpath(path) = begin
   isempty(path) && return (path, path)
-  path == "./missing" && return ("<unknown file>", path)
   Atom.isuntitled(path) && return ("untitled", path)
   !isabspath(path) && return (normpath(joinpath("base", path)), Atom.basepath(path))
   ("./" * relpath(path, homedir()), path)
 end
 
-baselink(path, line) = begin
+stacklink(::Nothing, line) = fade("<unknown file>")
+stacklink(path, line) = begin
+  path == "none" && return fade("$path:$line")
+  path == "./missing" && return fade("./missing")
   name, path = expandpath(path)
-  if name == "<unkown file>"
-    fade(name)
-  else
-    @dom [:a onmousedown=e->(open(path, line); DOM.stop) Atom.appendline(name, line)]
-  end
+  @dom[:a onmousedown=e->(open(path, line); DOM.stop) Atom.appendline(name, line)]
 end
 
 open(file, line) = msg("open", Dict(:file=>file, :line=>line-1))
 
-render(trace::StackTrace) = begin
-  @dom [:div class="error-trace"
+brief(f::StackTraces.StackFrame) = begin
+  f.linfo isa Nothing && return @dom[:span string(f.func)]
+  f.linfo isa Core.CodeInfo && return @dom[:span repr(f.linfo.code[1])]
+  @dom[:span replace(sprint(Base.show_tuple_as_call, f.linfo.def.name, f.linfo.specTypes),
+                     r"^([^(]+)\(.*\)$"=>s"\1")]
+end
+
+render(trace::StackTraces.StackTrace) = begin
+  @dom[:div class="error-trace"
     map(trace) do frame
-      line = if isnull(frame.linfo)
-        string(frame.func)
-      else
-        linfo = get(frame.linfo)
-        replace(sprint(Base.show_tuple_as_call, linfo.def.name, linfo.specTypes),
-                r"\(.*\)$",
-                "")
-      end
-      @dom [:div class="trace-entry $(Atom.locationshading(string(frame.file))[2:end])"
+      @dom[:div class="trace-entry $(Atom.locationshading(string(frame.file))[2:end])"
         fade("in ")
-        [:span line]
+        brief(frame)
         fade(" at ")
-        baselink(string(frame.file), frame.line)
+        stacklink(String(frame.file), frame.line)
         fade(frame.inlined ? " <inlined>" : "")]
     end...]
 end
 
-stripparams(t) = replace(t, r"\{([A-Za-z, ]*?)\}", "")
+stripparams(t) = replace(t, r"\{([A-Za-z, ]*?)\}"=>"")
 interpose(xs, y) = map(i -> iseven(i) ? xs[i÷2] : y, 2:2length(xs))
 
 render(m::Method) = begin
   tv, decls, file, line = Base.arg_decl_parts(m)
-  params = [@dom [:span x isempty(T) ? "" : "::" [:span class="syntax--support syntax--type" stripparams(T)]]
+  params = [@dom[:span x isempty(T) ? "" : "::" [:span class="syntax--support syntax--type" stripparams(T)]]
             for (x, T) in decls[2:end]]
-  sig = @dom [:span name(m) "(" interpose(params, ", ")... ")"]
-  link = file == :null ? "not found" : baselink(string(file), line)
-  @dom [:span sig " at " link]
+  sig = @dom[:span name(m) "(" interpose(params, ", ")... ")"]
+  link = file == :null ? "not found" : stacklink(string(file), line)
+  @dom[:span sig " at " link]
 end
 
-name(m::Base.MethodList) = @dom [:span class="syntax--support syntax--function" string(m.mt.name)]
-name(m::Method) = @dom [:span class="syntax--support syntax--function" string(m.name)]
+name(m::Base.MethodList) = @dom[:span class="syntax--support syntax--function" string(m.mt.name)]
+name(m::Method) = @dom[:span class="syntax--support syntax--function" string(m.name)]
 
 render(m::Base.MethodList) = begin
   ms = Atom.methodarray(m)
   isempty(ms) && return @dom [:span name(m) " has no methods"]
   length(ms) == 1 && return render(ms[1])
-  Expandable(@dom [:span name(m) " has $(length(ms)) methods"]) do
-    [@dom([:div render(method)]) for method in ms]
+  Expandable(@dom[:span name(m) " has $(length(ms)) methods"]) do
+    [@dom[:div render(method)] for method in ms]
   end
 end

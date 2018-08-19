@@ -6,13 +6,14 @@
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/write-json.jl"
 @require "./State.jl" State need state
+import Sockets: listenany, accept, TCPSocket
 
 @dynamic! currentUI = nothing
 const app_path = joinpath(@dirname(), "app")
 const json = MIME("application/json")
 const msglock = ReentrantLock()
 
-msg(a::App, data) = msg(a.stdin, data)
+msg(a::App, data) = msg(a.proc.in, data)
 msg(io::IO, data) = begin
   lock(msglock)
   show(io, json, data)
@@ -30,29 +31,29 @@ end
 
 Window(a::App; kwargs...) = begin
   port, server = listenany(3000)
-  initial_view = @dom [:html
+  initial_view = @dom[:html
     [:head
-      [:script "const params=" stringmime(json, Dict(:port=>port,:runtime=>DOM.runtime))]
+      [:script "const params=" repr(json, Dict(:port=>port,:runtime=>DOM.runtime))]
       [:script "require('$(joinpath(@dirname(), "index.js"))')"]]
     [:body]]
 
   # tell electron to create a window
   msg(a, Dict(:title => a.title,
               Dict(kwargs)...,
-              :html => stringmime("text/html", initial_view)))
+              :html => repr("text/html", initial_view)))
 
   # wait for that window to connect with this process
   sock = accept(server)
 
   # send events to the UI
-  loop = @schedule for line in eachline(sock)
+  loop = @async for line in eachline(sock)
     DOM.emit(w, Events.parse_event(line))
   end
 
   w = Window(sock, initial_view, nothing, loop)
 end
 
-Base.wait(e::Window) = wait(e.loop)
+Base.wait(e::Window) = fetch(e.loop)
 msg(a::Window, data) = msg(a.sock, data)
 
 const done_task = Task(identity)
@@ -123,7 +124,7 @@ render(ui::UI) =
 
 Base.display(ui::UI) = begin
   istaskdone(ui.display_task) || return
-  ui.display_task = @schedule begin
+  ui.display_task = @async begin
     ui.view = render(ui)
     for device in ui.devices
       display(device, ui.view)
@@ -138,9 +139,9 @@ end
 
 Base.display(w::Window, view::Node) = begin
   # wrap the view because DOM expects it to be a proper HTML document
-  wrapped = @dom [HTML view]
+  wrapped = @dom[HTML view]
   patch = DOM.diff(w.view, wrapped)
-  isnull(patch) || msg(w, patch)
+  patch == nothing || msg(w, patch)
   w.view = wrapped
   nothing
 end
@@ -149,16 +150,16 @@ DOM.emit(w::Window, e::Events.Event) = DOM.emit(w.view, e)
 
 async(fn::Function, pending::Node; onerror=handle_async_error) = begin
   ui = currentUI[] # deref here because we are using @dynamic! rather than @dynamic
-  n = AsyncNode(true, pending, @schedule begin
+  n = AsyncNode(true, pending, @async begin
     view = try need(fn()) catch e onerror(e, ui, n) end
     n.iscurrent && msg(ui, Dict(:command => "AsyncNode",
-                                :id => object_id(n),
+                                :id => objectid(n),
                                 :value => view))
     view
   end)
 end
 
-handle_async_error(e, _, __) = Base.showerror(STDERR, e)
+handle_async_error(e, _, __) = Base.showerror(stderr, e)
 
 mutable struct AsyncNode <: Node
   iscurrent::Bool
@@ -171,7 +172,7 @@ Base.convert(::Type{Primitive}, a::AsyncNode) =
   if istaskdone(a.task)
     Base.task_result(a.task)
   else
-    DOM.add_attr(a.pending_view, :id, object_id(a))
+    DOM.add_attr(a.pending_view, :id, objectid(a))
   end
 
 DOM.add_attr(a::AsyncNode, key::Symbol, value) = a

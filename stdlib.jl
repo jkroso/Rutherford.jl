@@ -55,7 +55,7 @@ map_scope(fn, key) = begin
   end
 end
 
-TextFeild(attrs, children) = begin
+TextField(attrs, children) = begin
   data = need(state[])
   @destruct {value, :focused=>isfocused, editpoint=length(value)} = data
   editpoint = min(editpoint, length(value))
@@ -80,14 +80,14 @@ TextFeild(attrs, children) = begin
                  :editpoint => editpoint + 1)
     end
   end
-  @dom [:input{:type=:text,
-               isfocused,
-               onkeydown,
-               selectionStart=editpoint,
-               selectionEnd=editpoint,
-               size=length(value) + 1,
-               value,
-               attrs...}]
+  @dom[:input{:type=:text,
+              isfocused,
+              onkeydown,
+              selectionStart=editpoint,
+              selectionEnd=editpoint,
+              size=length(value) + 1,
+              value,
+              attrs...}]
 end
 
-export TextFeild
+export TextField
