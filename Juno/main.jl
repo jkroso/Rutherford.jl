@@ -174,8 +174,18 @@ render(x::Symbol) = @dom[:span class="syntax--constant syntax--other syntax--sym
 render(x::Char) = @dom[:span class="syntax--string syntax--quoted syntax--single" repr(x)]
 render(x::VersionNumber) = @dom[:span class="syntax--string syntax--quoted syntax--other" repr(x)]
 render(x::Nothing) = @dom[:span class="syntax--constant" repr(x)]
-render(v::Union{Tuple,AbstractVector}) = expandable(v)
-render(dict::AbstractDict) = expandable(dict)
+render(v::Union{Tuple,AbstractVector,AbstractDict,NamedTuple}) = expandable(v)
+
+brief(nt::NamedTuple) = @dom[:span
+  [:span class="syntax--support syntax--type" "NamedTuple"]
+  [:span css"color: rgb(104, 110, 122)" "[$(length(nt))]"]]
+
+body(nt::NamedTuple) =
+  [@dom[:div css"display: flex"
+    string(key)
+    [:span css"padding: 0 5px" "="]
+    render(value)]
+  for (key, value) in zip(keys(nt), values(nt))]
 
 body(dict::AbstractDict) =
   [@dom[:div css"display: flex"
