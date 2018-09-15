@@ -5,6 +5,7 @@
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/JunoLab/Juno.jl" => Juno
 @require "github.com/jkroso/write-json.jl"
+import Dates
 using Markdown
 
 # TODO: figure out why I need to buffer the JSON in a String before writing it
@@ -175,6 +176,8 @@ render(x::Char) = @dom[:span class="syntax--string syntax--quoted syntax--single
 render(x::VersionNumber) = @dom[:span class="syntax--string syntax--quoted syntax--other" repr(x)]
 render(x::Nothing) = @dom[:span class="syntax--constant" repr(x)]
 render(v::Union{Tuple,AbstractVector,AbstractDict,NamedTuple}) = expandable(v)
+render(d::Dates.Date) = @dom[:span Dates.format(d, Dates.dateformat"dd U Y")]
+render(d::Dates.DateTime) = @dom[:span Dates.format(d, Dates.dateformat"dd/mm/Y H\h M\m S.s\s")]
 
 brief(nt::NamedTuple) = @dom[:span
   [:span class="syntax--support syntax--type" "NamedTuple"]
