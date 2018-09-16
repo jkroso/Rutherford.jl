@@ -175,7 +175,7 @@ render(x::Symbol) = @dom[:span class="syntax--constant syntax--other syntax--sym
 render(x::Char) = @dom[:span class="syntax--string syntax--quoted syntax--single" repr(x)]
 render(x::VersionNumber) = @dom[:span class="syntax--string syntax--quoted syntax--other" repr(x)]
 render(x::Nothing) = @dom[:span class="syntax--constant" repr(x)]
-render(v::Union{Tuple,AbstractVector,AbstractDict,NamedTuple}) = expandable(v)
+render(v::Union{Tuple,AbstractVector,AbstractDict,NamedTuple,Set}) = expandable(v)
 render(d::Dates.Date) = @dom[:span Dates.format(d, Dates.dateformat"dd U Y")]
 render(d::Dates.DateTime) = @dom[:span Dates.format(d, Dates.dateformat"dd/mm/Y H\h M\m S.s\s")]
 
@@ -197,7 +197,7 @@ body(dict::AbstractDict) =
     render(value)]
   for (key, value) in dict]
 
-body(v::Union{Tuple,AbstractVector}) = [@dom[:div render(x)] for x in v]
+body(v::Union{Tuple,AbstractVector,Set}) = [@dom[:div render(x)] for x in v]
 
 brief(x::Module) = @dom[:span class="syntax--keyword syntax--other" replace(repr(x), r"^Main\."=>"")]
 render(x::Module) = begin
