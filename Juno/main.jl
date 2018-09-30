@@ -9,7 +9,8 @@ import Dates
 using Markdown
 
 # TODO: figure out why I need to buffer the JSON in a String before writing it
-msg(args...) = Atom.isactive(Atom.sock) && println(Atom.sock, repr("application/json", Any[args...]))
+msg(x::String, args...) =
+  Atom.isactive(Atom.sock) && println(Atom.sock, repr("application/json", Any[x, args...]))
 
 const event_parsers = Dict{String,Function}(
   "mousedown" => d-> Events.MouseDown(d["path"], Events.MouseButton(d["button"]), d["position"]...),

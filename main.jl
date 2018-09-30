@@ -13,13 +13,13 @@ const app_path = joinpath(@dirname(), "app")
 const json = MIME("application/json")
 const msglock = ReentrantLock()
 
+msg(x; kwargs...) = msg(x, kwargs)
 msg(a::App, data) = msg(a.proc.in, data)
-msg(io::IO, data) = begin
-  lock(msglock)
-  show(io, json, data)
-  write(io, '\n')
-  unlock(msglock)
-end
+msg(io::IO, data) =
+  lock(msglock) do
+    show(io, json, data)
+    write(io, '\n')
+  end
 
 "A Window corresponds to an OS window and can be used to display a UI"
 mutable struct Window
@@ -38,9 +38,7 @@ Window(a::App; kwargs...) = begin
     [:body]]
 
   # tell electron to create a window
-  msg(a, Dict(:title => a.title,
-              Dict(kwargs)...,
-              :html => repr("text/html", initial_view)))
+  msg(a, title=a.title, kwargs..., html=repr("text/html", initial_view))
 
   # wait for that window to connect with this process
   sock = accept(server)
@@ -152,9 +150,7 @@ async(fn::Function, pending::Node; onerror=handle_async_error) = begin
   ui = currentUI[] # deref here because we are using @dynamic! rather than @dynamic
   n = AsyncNode(true, pending, @async begin
     view = try need(fn()) catch e onerror(e, ui, n) end
-    n.iscurrent && msg(ui, Dict(:command => "AsyncNode",
-                                :id => objectid(n),
-                                :value => view))
+    n.iscurrent && msg(ui, command="AsyncNode", id=objectid(n), value=view)
     view
   end)
 end
