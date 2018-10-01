@@ -3,7 +3,7 @@
 @require "github.com/jkroso/Destructure.jl" @destruct
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
 @require "github.com/jkroso/DOM.jl" @dom emit
-@require "./State.jl" State Cursor state
+@require "./State.jl" State Cursor state swap
 
 """
 Define an event handler that applies a patch to the scope defined
@@ -56,10 +56,9 @@ map_scope(fn, key) = begin
 end
 
 TextField(attrs, children) = begin
-  data = need(state[])
-  @destruct {value, :focused=>isfocused, editpoint=length(value)} = data
-  editpoint = min(editpoint, length(value))
-  onkeydown = @patch (e, path) -> begin
+  @destruct {input, rest...} = attrs
+  @destruct {value, :focused=>isfocused, editpoint} = input
+  onkeydown = (e, path) -> swap(input) do data
     if e.key == "Enter"
       emit(path, :onsubmit, value)
     elseif e.key == "Backspace"
@@ -87,7 +86,16 @@ TextField(attrs, children) = begin
               selectionEnd=editpoint,
               size=length(value) + 1,
               value,
-              attrs...}]
+              rest...}]
 end
+
+"""
+Wrap a value with with all the extra data needed for a UI component to render it.
+If no value is provided then an empty one should be generated
+"""
+function data end
+
+data(::typeof(TextField)) = data(TextField, "")
+data(::typeof(TextField), str::AbstractString) = (value=str, focused=false, editpoint=length(str))
 
 export TextField

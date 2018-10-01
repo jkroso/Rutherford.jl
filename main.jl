@@ -1,11 +1,11 @@
-@require "github.com/MikeInnes/MacroTools.jl" => MacroTools @match @capture
 @require "github.com/jkroso/DOM.jl" => DOM Events Node Container Primitive HTML @dom
+@require "github.com/MikeInnes/MacroTools.jl" => MacroTools @capture
 @require "github.com/jkroso/Prospects.jl/deftype" deftype
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
 @require "github.com/jkroso/Prospects.jl" assoc
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/write-json.jl"
-@require "./State.jl" State need state
+@require "./State.jl" State need state StateContainer
 import Sockets: listenany, accept, TCPSocket
 
 @dynamic! currentUI = nothing
@@ -95,7 +95,7 @@ it triggers an update to the UI
 """
 couple(ui::UI, s::State) = begin
   ui.state = s
-  push!(s.UIs, ui)
+  push!(getfield(s, :UIs), ui)
 end
 
 """
@@ -116,8 +116,8 @@ end
 
 "Generate a DOM view using the UI's current state"
 render(ui::UI) =
-  @dynamic! let state = ui.state, currentUI = ui
-    ui.render(need(ui.state))
+  @dynamic! let currentUI = ui
+    ui.render(ui.state)
   end
 
 Base.display(ui::UI) = begin
@@ -177,6 +177,7 @@ DOM.diff(a::AsyncNode, b::AsyncNode) = begin
   DOM.diff(convert(Primitive, a), convert(Primitive, b))
 end
 
+# TODO: delete
 "A UI chunk that has some ephemeral state associated with it"
 abstract type Component <: Node end
 
@@ -222,3 +223,5 @@ setstate(c::Component, state) = begin
 end
 
 Base.show(io::IO, m::MIME, c::Component) = show(io, m, render(c))
+
+Base.convert(::Type{Node}, s::StateContainer) = render(s)
