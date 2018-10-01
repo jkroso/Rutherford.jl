@@ -66,7 +66,10 @@ msg(::Device, data) = msg(data[:command], data)
 "Get the Module associated with the current file"
 getmodule(path) =
   get!(Kip.modules, path) do
-    @eval Main module $(Symbol(:⭒, Kip.pkgname(path))) using Kip end
+    @eval Main module $(Symbol(:⭒, Kip.pkgname(path)))
+      using InteractiveUtils
+      using Kip
+    end
   end
 
 global dock_result
