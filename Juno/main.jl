@@ -1,4 +1,4 @@
-@require ".." => Rutherford UI msg render @component
+@require ".." => Rutherford UI msg render need @component
 @require "github.com/jkroso/DOM.jl" => DOM Events @dom @css_str
 @require "github.com/JunoLab/CodeTools.jl" => CodeTools
 @require "github.com/jkroso/Destructure.jl" @destruct
@@ -113,6 +113,11 @@ Atom.handle("rutherford eval") do data
   end
 end
 
+Base.display(d::DockResult) = begin
+  d.ui.view = render(d.ui)
+  display(d, d.ui.view)
+end
+
 lastsheet = DOM.CSSNode()
 
 Base.display(d::Device, view::DOM.Node) = begin
@@ -123,9 +128,9 @@ Base.display(d::Device, view::DOM.Node) = begin
   end
   if isdefined(d, :view)
     patch = DOM.diff(d.view, view)
-    patch == nothing || msg("patch", Dict(:id => d.snippet.id, :patch => patch, :state => d.state))
+    patch == nothing || msg("patch", (id=d.snippet.id, patch=patch, state=d.state))
   else
-    msg("render", Dict(:state => d.state, :id => d.snippet.id, :dom => view, :location => location(d)))
+    msg("render", (state=d.state, id=d.snippet.id, dom=view, location=location(d)))
   end
   d.view = view
 end
@@ -154,9 +159,9 @@ Atom.handle("result done") do id
   delete!(UIs, id)
 end
 
-gui(device, result) = UI(result->render(device, result), result)
+gui(device, result) = UI(result->render(device, need(result)), result)
 gui(device, result::UI) = result
-gui(device, result::DOM.Node) = UI(identity, result)
+gui(device, result::DOM.Node) = UI(need, result)
 
 render(device, value) = render(value)
 render(x::Number) = @dom[:span class="syntax--constant syntax--numeric" repr(x)]
@@ -470,7 +475,7 @@ stacklink(path, line) = begin
   @dom[:a onmousedown=e->(open(path, line); DOM.stop) Atom.appendline(name, line)]
 end
 
-open(file, line) = msg("open", Dict(:file=>file, :line=>line-1))
+open(file, line) = msg("open", (file=file, line=line-1))
 
 brief(f::StackTraces.StackFrame) = begin
   f.linfo isa Nothing && return @dom[:span string(f.func)]

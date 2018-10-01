@@ -33,7 +33,7 @@ Window(a::App; kwargs...) = begin
   port, server = listenany(3000)
   initial_view = @dom[:html
     [:head
-      [:script "const params=" repr(json, Dict(:port=>port,:runtime=>DOM.runtime))]
+      [:script "const params=" repr(json, (port=port, runtime=DOM.runtime))]
       [:script "require('$(joinpath(@dirname(), "index.js"))')"]]
     [:body]]
 
