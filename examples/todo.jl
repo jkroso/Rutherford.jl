@@ -59,7 +59,7 @@ UI(state) do state
             margin: 10px
             font-family: monospace
             """
-    [TextField input=state[:input]
+    [scope(TextField, :input)
       css"""
       width: 100%
       font: 2em/1.8em monospace

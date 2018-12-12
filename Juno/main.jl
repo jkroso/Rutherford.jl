@@ -1,4 +1,4 @@
-@require ".." => Rutherford UI msg render need @component
+@require ".." couple decouple UI msg render
 @require "github.com/jkroso/DOM.jl" => DOM Events @dom @css_str
 @require "github.com/JunoLab/CodeTools.jl" => CodeTools
 @require "github.com/jkroso/Destructure.jl" @destruct
@@ -76,23 +76,21 @@ global dock_result
 const inline_results = Dict{Int32,InlineResult}()
 const UIs = Dict{Int32,UI}()
 
-evaluate(s::Snippet) = begin
-  lock(Atom.evallock)
-  result = Atom.withpath(s.path) do
-    Atom.@errs include_string(getmodule(s.path), s.text, s.path, s.line)
+evaluate(s::Snippet) =
+  lock(Atom.evallock) do
+    Atom.withpath(s.path) do
+      Atom.@errs include_string(getmodule(s.path), s.text, s.path, s.line)
+    end
   end
-  unlock(Atom.evallock)
-  result
-end
 
-display_gui(d::Device, result) = begin
+init_gui(d::Device, result) = begin
   @destruct {text,id} = d.snippet
   d.state = result isa Atom.EvalError ? :error : :ok
   if Atom.ends_with_semicolon(text) && d.state == :ok
     result = icon("check")
   end
   UIs[id] = gui(d, result)
-  Base.invokelatest(Rutherford.couple, d, UIs[id])
+  Base.invokelatest(couple, d, UIs[id])
 end
 
 Atom.handle("rutherford eval") do data
@@ -106,10 +104,10 @@ Atom.handle("rutherford eval") do data
     @isdefined(dock_result) && Base.invokelatest(display, dock_result)
     inline_results[id] = InlineResult(snippet)
   end
-  Base.invokelatest(display_gui, device, result)
+  Base.invokelatest(init_gui, device, result)
   # redraw all other snippets
   for (device, result) in others
-    Base.invokelatest(display_gui, device, result)
+    Base.invokelatest(init_gui, device, result)
   end
 end
 
@@ -138,13 +136,13 @@ end
 location(::InlineResult) = "inline"
 location(::DockResult) = "dock"
 
-Rutherford.couple(device::Device, ui::UI) = begin
+couple(device::Device, ui::UI) = begin
   push!(ui.devices, device)
   device.ui = ui
   display(device, ui)
 end
 
-Rutherford.decouple(i::Device, ui::UI) = begin
+decouple(i::Device, ui::UI) = begin
   deleteat!(ui.devices, findfirst((x->x === i), ui.devices))
   i.ui = nothing
 end
@@ -159,14 +157,17 @@ Atom.handle("result done") do id
   delete!(UIs, id)
 end
 
-gui(device, result) = UI(result->render(device, need(result)), result)
+gui(device, result) = begin
+  ui = UI(render, result)
+  couple(device, ui)
+  ui
+end
 gui(device, result::UI) = result
-gui(device, result::DOM.Node) = UI(need, result)
+gui(device, result::DOM.Node) = UI(identity, result)
 
-render(device, value) = render(value)
-render(x::Number) = @dom[:span class="syntax--constant syntax--numeric" repr(x)]
-render(n::Union{AbstractFloat,Integer}) = @dom[:span class="syntax--constant syntax--numeric" seperate(n)]
-render(n::Bool) = @dom[:span class="syntax--constant syntax--boolean" string(n)]
+"""
+Formats long numbers with commas seperating it into chunks
+"""
 seperate(value::Number; kwargs...) = seperate(string(convert(Float64, value)), kwargs...)
 seperate(value::Integer; kwargs...) = seperate(string(value), kwargs...)
 seperate(str::String, sep = ",", k = 3) = begin
@@ -178,48 +179,56 @@ seperate(str::String, sep = ",", k = 3) = begin
   join([join(groups, sep), parts[2]], '.')
 end
 
-render(x::AbstractString) = @dom[:span class="syntax--string syntax--quoted syntax--double" repr(x)]
-render(r::Regex) = @dom [:span class="syntax--string syntax--regexp" repr(r)]
-render(x::Symbol) = @dom[:span class="syntax--constant syntax--other syntax--symbol" repr(x)]
-render(x::Char) = @dom[:span class="syntax--string syntax--quoted syntax--single" repr(x)]
-render(x::VersionNumber) = @dom[:span class="syntax--string syntax--quoted syntax--other" repr(x)]
-render(x::Nothing) = @dom[:span class="syntax--constant" repr(x)]
-render(v::Union{Tuple,AbstractVector,AbstractDict,NamedTuple,Set}) = expandable(v)
+syntax(x) = @dom[:span class=syntax_class(x) repr(x)]
+syntax_class(n::Bool) = ["syntax--constant", "syntax--boolean"]
+syntax_class(x::Number) = ["syntax--constant", "syntax--numeric"]
+syntax_class(::AbstractString) = ["syntax--string", "syntax--quoted", "syntax--double"]
+syntax_class(::Regex) = ["syntax--string", "syntax--regexp"]
+syntax_class(::Symbol) = ["syntax--constant", "syntax--other", "syntax--symbol"]
+syntax_class(::Char) = ["syntax--string", "syntax--quoted", "syntax--single"]
+syntax_class(::VersionNumber) = ["syntax--string", "syntax--quoted", "syntax--other"]
+syntax_class(::Nothing) = ["syntax--constant"]
+syntax_class(::Function) = ["syntax--support", "syntax--function"]
+
+render(n::Union{AbstractFloat,Integer}) = @dom[:span class=syntax_class(n) seperate(n)]
+render(x::Union{AbstractString,Regex,Symbol,Char,VersionNumber,Nothing,Number,Bool}) = syntax(x)
 render(d::Dates.Date) = @dom[:span Dates.format(d, Dates.dateformat"dd U Y")]
 render(d::Dates.DateTime) = @dom[:span Dates.format(d, Dates.dateformat"dd/mm/Y H\h M\m S.s\s")]
+render(v::Union{Tuple, AbstractVector, AbstractDict, NamedTuple, Set, Function}) = expandable(v)
 
-brief(nt::NamedTuple) = @dom[:span
-  [:span class="syntax--support syntax--type" "NamedTuple"]
-  [:span css"color: rgb(104, 110, 122)" "[$(length(nt))]"]]
+brief(nt::NamedTuple) =
+  @dom[:span
+    [:span class="syntax--support syntax--type" "NamedTuple"]
+    [:span css"color: rgb(104, 110, 122)" "[$(length(nt))]"]]
 
 body(nt::NamedTuple) =
-  [@dom[:div css"display: flex"
-    string(key)
-    [:span css"padding: 0 5px" "="]
-    render(value)]
-  for (key, value) in zip(keys(nt), values(nt))]
+  @dom[:div
+    (@dom[:div css"display: flex"
+      String(key)
+      [:span css"padding: 0 5px" "="]
+      scope(key)]
+    for (key, value) in keys(nt))...]
 
 body(dict::AbstractDict) =
-  [@dom[:div css"display: flex"
-    render(key)
-    [:span css"padding: 0 10px" "→"]
-    render(value)]
-  for (key, value) in dict]
+  @dom[:div
+    (@dom[:div css"display: flex"
+      render(key)
+      [:span css"padding: 0 10px" "→"]
+      scope(key)]
+    for key in keys(dict))...]
 
-body(v::Union{Tuple,AbstractVector,Set}) = [@dom[:div render(x)] for x in v]
+body(v::Union{Tuple,AbstractVector,Set}) = @dom[:div (@dom[:div render(x)] for x in v)...]
 
+header(x) = brief(x)
+header(m::Module) = @dom[:span brief(x) " from " stacklink(getfile(x), 0)]
 brief(x::Module) = @dom[:span class="syntax--keyword syntax--other" replace(repr(x), r"^Main\."=>"")]
-render(x::Module) = begin
-  file = getfile(x)
-  Expandable(@dom[:span brief(x) " from " stacklink(file, 0)]) do
-    @dom[:div css"max-height: 500px"
-      (@dom[:div css"display: flex"
-        [:span string(name)]
-        [:span css"padding: 0 10px" "→"]
-        isdefined(x, name) ? render(getfield(x, name)) : fade("#undef")]
-      for name in names(x, all=true) if !occursin('#', String(name)))...]
-  end
-end
+body(x::Module) =
+  @dom[:div css"max-height: 500px"
+    (@dom[:div css"display: flex"
+      [:span string(name)]
+      [:span css"padding: 0 10px" "→"]
+      isdefined(x, name) ? render(getfield(x, name)) : fade("#undef")]
+    for name in names(x, all=true) if !occursin('#', String(name)))...]
 
 getfile(m::Module) = begin
   if pathof(m) != nothing
@@ -229,24 +238,6 @@ getfile(m::Module) = begin
     mod === m && return file
   end
 end
-
-render(f::Function) =
-  Expandable(name(f)) do
-    @dom[:div css"""
-              padding: 8px 0
-              max-width: 800px
-              white-space: normal
-              h1 {font-size: 1.4em}
-              pre {padding: 0}
-              > div:last-child > div:last-child {overflow: visible}
-              """
-      Atom.CodeTools.hasdoc(f) ? render(Base.doc(f)) : @dom[:p "no docs"]
-      render(methods(f))]
-  end
-
-isanon(f) = occursin('#', String(nameof(f)))
-name(f::Function) = @dom[:span class="syntax--support syntax--function"
-                          isanon(f) ? "λ" : String(nameof(f))]
 
 "render a chevron symbol that rotates down when open"
 chevron(open) =
@@ -268,55 +259,48 @@ brief(data) =
     [:span css"color: rgb(104, 110, 122)" "[$(length(data))]"]]
 brief(T::DataType) = @dom[:span class="syntax--support syntax--type" repr(T)]
 
-expandable(data) = begin
-  isempty(data) && return brief(data)
-  Expandable(()->body(data), brief(data))
-end
-
-@component Expandable(open=false)
-render(self::Expandable, fn, header) = begin
-  @destruct {open} = Rutherford.getstate(self)
+expandable(fn, head, data) = begin
+  applicable(iterate, data) && isempty(data) && return brief(data)
+  open = getprivate(expandable, false)
+  onmousedown(e) = setprivate(expandable, !open)
   @dom[:div
-    [:div onmousedown=e->Rutherford.setstate(self, :open, !open)
-      chevron(open)
-      header]
+    [:div{onmousedown} chevron(open) head]
     if open
-      @dom[:div css"padding: 3px 0 3px 20px; overflow: auto; max-height: 500px" vcat(fn())...]
+      @dom[:div css"padding: 3px 0 3px 20px; overflow: auto; max-height: 500px" fn()]
     end]
 end
 
-render(T::DataType) = begin
-  head = if supertype(T) ≠ Any
+header(T::DataType) =
+  if supertype(T) ≠ Any
     @dom[:span brief(T) " <: " brief(supertype(T))]
   else
     brief(T)
   end
-  fields = try fieldnames(T) catch; () end
-  isempty(fields) && return head
-  Expandable(head) do
-    [@dom[:div css"display: flex"
+body(T::DataType) =
+  @dom[:div
+    (@dom[:div css"display: flex"
       [:span string(name)]
       [:span "::"]
       render(fieldtype(T, name))]
-    for name in fields]
-  end
-end
-
+    for name in fields(T))...]
 render(x::UnionAll) = render(x.body)
+
+fields(T) = try fieldnames(T) catch; () end
 
 "By default just render the structure of the object"
 render(x) = structure(x)
 
-structure(x) = begin
-  head = brief(typeof(x))
-  fields = try fieldnames(typeof(x)) catch; () end
-  isempty(fields) && return head
-  Expandable(head) do
-    [@dom[:div css"display: flex"
-      [:span string(field)]
-      [:span css"padding: 0 10px" "→"]
-      render(getfield(x, field))]
-     for field in fields]
+structure(data) = begin
+  T = typeof(data)
+  attrs = fields(T)
+  isempty(attrs) && return brief(T)
+  expandable(brief(T)) do
+    @dom[:div
+      (@dom[:div css"display: flex"
+        [:span string(field)]
+        [:span css"padding: 0 10px" "→"]
+        render(x[field])]
+       for field in attrs)...]
   end
 end
 
@@ -515,7 +499,24 @@ render(m::Base.MethodList) = begin
   ms = Atom.methodarray(m)
   isempty(ms) && return @dom [:span name(m) " has no methods"]
   length(ms) == 1 && return render(ms[1])
-  Expandable(@dom[:span name(m) " has $(length(ms)) methods"]) do
-    [@dom[:div render(method)] for method in ms]
+  expandable(@dom[:span name(m) " has $(length(ms)) methods"]) do
+    @dom[:div (@dom[:div render(method)] for method in ms)...]
   end
 end
+
+render(f::Function) =
+  expandable(name(f)) do
+    @dom[:div css"""
+              padding: 8px 0
+              max-width: 800px
+              white-space: normal
+              h1 {font-size: 1.4em}
+              pre {padding: 0}
+              > div:last-child > div:last-child {overflow: visible}
+              """
+      Atom.CodeTools.hasdoc(f) ? render(Base.doc(f)) : @dom[:p "No documentation available"]
+      render(methods(f))]
+  end
+
+isanon(f) = occursin('#', String(nameof(f)))
+name(f::Function) = @dom[:span class=syntax_class(f) isanon(f) ? "λ" : String(nameof(f))]
