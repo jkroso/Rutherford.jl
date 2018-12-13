@@ -1,10 +1,12 @@
 @require "github.com/jkroso/DOM.jl" => DOM Events Node Container Primitive HTML @dom
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
+@require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/write-json.jl"
+@require "./State" TopLevelCursor UIState cursor currentUI
+
 import Sockets: listenany, accept, TCPSocket
 
-@dynamic! currentUI = nothing
 const app_path = joinpath(@dirname(), "app")
 const json = MIME("application/json")
 const msglock = ReentrantLock()
@@ -62,16 +64,25 @@ mutable struct UI
   render::Any # any callable object
   devices::Vector
   display_task::Task
-  data::Any
+  data::TopLevelCursor
+  private::Dict{Vector{Any},Dict{Any,Any}}
 end
-UI(fn, data) = UI(DOM.null_node, fn, [], done_task, data)
+UI(fn, data) = begin
+  ui = UI(fn, TopLevelCursor(data))
+  push!(getfield(ui.data, :UIs), ui)
+  ui
+end
+UI(fn, data::UIState) = UI(DOM.null_node, fn, [], done_task, data, Dict{Vector{Any},Dict{Any,Any}}())
 
-DOM.emit(ui::UI, e::Events.Event) =
-  @static if isinteractive()
-    Base.invokelatest(DOM.emit, ui.view, e)
-  else
-    DOM.emit(ui.view, e)
+DOM.emit(ui::UI, e::Events.Event) = begin
+  @dynamic! let currentUI = ui, cursor = ui.data
+    @static if isinteractive()
+      Base.invokelatest(DOM.emit, ui.view, e)
+    else
+      DOM.emit(ui.view, e)
+    end
   end
+end
 
 msg(ui::UI, data) = foreach(d->msg(d, data), ui.devices)
 
@@ -93,14 +104,19 @@ end
 
 "Generate a DOM view using the UI's current state"
 render(ui::UI) =
-  @dynamic! let currentUI = ui
+  @dynamic! let currentUI = ui, cursor = ui.data
     ui.render(ui.data)
   end
 
 Base.display(ui::UI) = begin
   istaskdone(ui.display_task) || return
   ui.display_task = @async begin
-    ui.view = render(ui)
+    try
+      view = Atom.@errs render(ui)
+      ui.view = view isa Atom.EvalError ? render(view) : view
+    catch e
+      @show e
+    end
     for device in ui.devices
       display(device, ui.view)
     end

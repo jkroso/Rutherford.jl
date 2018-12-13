@@ -2,11 +2,13 @@
 @require "github.com/jkroso/DOM.jl" => DOM Events @dom @css_str
 @require "github.com/JunoLab/CodeTools.jl" => CodeTools
 @require "github.com/jkroso/Destructure.jl" @destruct
+@require "github.com/jkroso/DynamicVar.jl" @dynamic!
 @require "github.com/JunoLab/Atom.jl" => Atom
-@require "github.com/JunoLab/Juno.jl" => Juno
 @require "github.com/jkroso/write-json.jl"
+@require "../State" UIState cursor need private
+@require "./render-markdown.jl" renderMD
+import Markdown
 import Dates
-using Markdown
 
 # TODO: figure out why I need to buffer the JSON in a String before writing it
 msg(x::String, args...) =
@@ -26,6 +28,7 @@ const event_parsers = Dict{String,Function}(
   "resize" => d-> Events.Resize(d["width"], d["height"]),
   "scroll" => d-> Events.Scroll(d["path"], d["position"]...))
 
+# TODO: Should emit events on the device rather than the UI
 Atom.handle("event") do id, data
   DOM.emit(UIs[id], event_parsers[data["type"]](data))
 end
@@ -157,11 +160,7 @@ Atom.handle("result done") do id
   delete!(UIs, id)
 end
 
-gui(device, result) = begin
-  ui = UI(render, result)
-  couple(device, ui)
-  ui
-end
+gui(device, result) = UI(render, result)
 gui(device, result::UI) = result
 gui(device, result::DOM.Node) = UI(identity, result)
 
@@ -190,34 +189,13 @@ syntax_class(::VersionNumber) = ["syntax--string", "syntax--quoted", "syntax--ot
 syntax_class(::Nothing) = ["syntax--constant"]
 syntax_class(::Function) = ["syntax--support", "syntax--function"]
 
+render(c::UIState) = @dynamic! let cursor = c; render(need(c)) end
+
 render(n::Union{AbstractFloat,Integer}) = @dom[:span class=syntax_class(n) seperate(n)]
-render(x::Union{AbstractString,Regex,Symbol,Char,VersionNumber,Nothing,Number,Bool}) = syntax(x)
+render(x::Union{AbstractString,Regex,Symbol,Char,VersionNumber,Nothing,Number}) = syntax(x)
+render(b::Bool) = syntax(b)
 render(d::Dates.Date) = @dom[:span Dates.format(d, Dates.dateformat"dd U Y")]
 render(d::Dates.DateTime) = @dom[:span Dates.format(d, Dates.dateformat"dd/mm/Y H\h M\m S.s\s")]
-render(v::Union{Tuple, AbstractVector, AbstractDict, NamedTuple, Set, Function}) = expandable(v)
-
-brief(nt::NamedTuple) =
-  @dom[:span
-    [:span class="syntax--support syntax--type" "NamedTuple"]
-    [:span css"color: rgb(104, 110, 122)" "[$(length(nt))]"]]
-
-body(nt::NamedTuple) =
-  @dom[:div
-    (@dom[:div css"display: flex"
-      String(key)
-      [:span css"padding: 0 5px" "="]
-      scope(key)]
-    for (key, value) in keys(nt))...]
-
-body(dict::AbstractDict) =
-  @dom[:div
-    (@dom[:div css"display: flex"
-      render(key)
-      [:span css"padding: 0 10px" "→"]
-      scope(key)]
-    for key in keys(dict))...]
-
-body(v::Union{Tuple,AbstractVector,Set}) = @dom[:div (@dom[:div render(x)] for x in v)...]
 
 header(x) = brief(x)
 header(m::Module) = @dom[:span brief(x) " from " stacklink(getfile(x), 0)]
@@ -254,44 +232,10 @@ chevron(open) =
 
 "A summary of a datastructure"
 brief(data) =
-  @dom[:span
-    brief(typeof(data))
-    [:span css"color: rgb(104, 110, 122)" "[$(length(data))]"]]
-brief(T::DataType) = @dom[:span class="syntax--support syntax--type" repr(T)]
-
-expandable(fn, head, data) = begin
-  applicable(iterate, data) && isempty(data) && return brief(data)
-  open = getprivate(expandable, false)
-  onmousedown(e) = setprivate(expandable, !open)
-  @dom[:div
-    [:div{onmousedown} chevron(open) head]
-    if open
-      @dom[:div css"padding: 3px 0 3px 20px; overflow: auto; max-height: 500px" fn()]
-    end]
-end
-
-header(T::DataType) =
-  if supertype(T) ≠ Any
-    @dom[:span brief(T) " <: " brief(supertype(T))]
-  else
-    brief(T)
-  end
-body(T::DataType) =
-  @dom[:div
-    (@dom[:div css"display: flex"
-      [:span string(name)]
-      [:span "::"]
-      render(fieldtype(T, name))]
-    for name in fields(T))...]
-render(x::UnionAll) = render(x.body)
-
-fields(T) = try fieldnames(T) catch; () end
+  @dom[:span brief(typeof(data)) [:span css"color: rgb(104, 110, 122)" "[$(length(data))]"]]
 
 "By default just render the structure of the object"
-render(x) = structure(x)
-
-structure(data) = begin
-  T = typeof(data)
+render(data::T) where T = begin
   attrs = fields(T)
   isempty(attrs) && return brief(T)
   expandable(brief(T)) do
@@ -299,147 +243,33 @@ structure(data) = begin
       (@dom[:div css"display: flex"
         [:span string(field)]
         [:span css"padding: 0 10px" "→"]
-        render(x[field])]
+        render(get(data, field))]
        for field in attrs)...]
   end
 end
 
-# Markdown is loose with its types so we need special functions `renderMD`
-render(md::Markdown.MD) =
-  @dom[:div class="markdown" map(renderMD, CodeTools.flatten(md).content)...]
-renderMD(s::AbstractString) = @dom[:p s]
-renderMD(p::Markdown.Paragraph) = @dom[:p map(renderMDinline, vcat(p.content))...]
-renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, vcat(p.content))...]
-renderMD(l::Markdown.LaTeX) = @dom[:latex class="latex block" block=true Atom.latex2katex(l.formula)]
-renderMD(l::Markdown.Link) = @dom[:a href=l.url l.text]
-renderMD(md::Markdown.HorizontalRule) = @dom[:hr]
-
-renderMD(h::Markdown.Header{l}) where l =
-  DOM.Container{Symbol(:h, l)}(DOM.Attrs(), map(renderMDinline, vcat(h.text)))
-
-renderMD(c::Markdown.Code) =
-  @dom[:pre
-    [:code class=isempty(c.language) ? "julia" : c.language
-           block=true
-      c.code]]
-
-renderMD(f::Markdown.Footnote) =
-  @dom[:div class="footnote" id="footnote-$(f.id)"
-    [:p class="footnote-title" f.id]
-    renderMD(f.text)]
-
-renderMD(md::Markdown.Admonition) =
-  @dom[:div class="admonition $(md.category)"
-    [:p class="admonition-title $(md.category == "warning" ? "icon-alert" : "icon-info")" md.title]
-    renderMD(md.content)]
-
-renderMD(md::Markdown.List) =
-  DOM.Container{Markdown.isordered(md) ? :ol : :ul}(
-    DOM.Attrs(:start=>md.ordered > 1 ? string(md.ordered) : ""),
-    [@dom[:li renderMDinline(item)] for item in md.items])
-
-renderMD(md::Markdown.Table) = begin
-  align = map(md.align) do s
-    s == :c && return "center"
-    s == :r && return "right"
-    s == :l && return "left"
-  end
-  @dom[:table css"""
-              border-collapse: collapse
-              border-spacing: 0
-              empty-cells: show
-              border: 1px solid #cbcbcb
-              > thead
-                background-color: #e0e0e0
-                color: #000
-                vertical-align: bottom
-              > thead > tr > th, > tbody > tr > td
-                font-size: inherit
-                margin: 0
-                overflow: visible
-                padding: 0.5em 1em
-                border-width: 0 0 1px 0
-              > tbody > tr:last-child > td
-                border-bottom-width: 0
-              """
-    [:thead
-      [:tr (@dom[:th align=align[i] renderMDinline(column)]
-            for (i, column) in enumerate(md.rows[1]))...]]
-    [:tbody
-      map(md.rows[2:end]) do row
-        @dom[:tr (@dom[:td align=align[i] renderMDinline(column)]
-                  for (i, column) in enumerate(row))...]
-      end...]]
-end
-
-renderMDinline(v::Vector) =
-  length(v) == 1 ? renderMDinline(v[1]) : @dom[:span map(renderMDinline, v)...]
-renderMDinline(md::Union{Symbol,AbstractString}) = DOM.Text(string(md))
-renderMDinline(md::Markdown.Bold) = @dom[:b renderMDinline(md.text)]
-renderMDinline(md::Markdown.Italic) = @dom[:em renderMDinline(md.text)]
-renderMDinline(md::Markdown.Image) = @dom[:img src=md.url alt=md.alt]
-renderMDinline(l::Markdown.Link) = @dom[:a href=l.url renderMDinline(l.text)]
-renderMDinline(br::Markdown.LineBreak) = @dom[:br]
-
-renderMDinline(f::Markdown.Footnote) =
-  @dom[:a href="#footnote-$(f.id)" class="footnote" [:span "[$(f.id)]"]]
-
-renderMDinline(code::Markdown.Code) =
-  @dom[:code class=isempty(code.language) ? "julia" : code.language
-             block=false
-    code.code]
-
-renderMDinline(md::Markdown.LaTeX) =
-  @dom[:latex class="latex inline" block=false Atom.latex2katex(md.formula)]
-
-render(e::Atom.EvalError) = begin
-  header = split(sprint(showerror, e.err), '\n')
-  trace = Atom.cliptrace(Atom.errtrace(e))
-  head = @dom[:strong class="error-description" color(header[1])]
-  tail = color(join(header[2:end], '\n'))
-  if isempty(trace)
-    length(header) == 1 ? head : Expandable((()->tail), head)
+brief(T::DataType) = @dom[:span class="syntax--support syntax--type" repr(T)]
+header(T::DataType) = begin
+  if supertype(T) ≠ Any
+    @dom[:span brief(T) " <: " brief(supertype(T))]
   else
-    Expandable(head) do
-      [length(header) == 1 ? nothing : tail,
-       render(trace)]
-    end
+    brief(T)
   end
 end
-
-"Handle ANSI color sequences"
-color(str) = begin
-  matches = eachmatch(r"\e\[(\d{2})m", str)|>collect
-  isempty(matches) && return @dom[:span str]
-  out = [@dom[:span class=colors[9] str[1:matches[1].offset-1]]]
-  for (i, current) in enumerate(matches)
-    start = current.offset+length(current.match)
-    cutoff = i == endof(matches) ? endof(str) : matches[i+1].offset-1
-    class = colors[parse(UInt8, current.captures[1]) - UInt8(30)]
-    text = str[start:cutoff]
-    push!(out, @dom[:span{class} text])
+render(T::DataType) = begin
+  attrs = fields(T)
+  isempty(attrs) && return header(T)
+  expandable(header(T)) do
+    @dom[:div
+      (@dom[:div css"display: flex"
+        [:span string(name)]
+        [:span "::"]
+        render(fieldtype(T, name))]
+      for name in attrs)...]
   end
-  @dom[:p out...]
 end
-
-const colors = Dict{UInt8,Symbol}([
-  0 => css"color: black",
-  1 => css"color: red",
-  2 => css"color: green",
-  3 => css"color: yellow",
-  4 => css"color: blue",
-  5 => css"color: magenta",
-  6 => css"color: cyan",
-  7 => css"color: white",
-  9 => css"color: lightgray",
-  60 => css"color: lightblack",
-  61 => css"color: #f96666",
-  62 => css"color: lightgreen",
-  63 => css"color: lightyellow",
-  64 => css"color: lightblue",
-  65 => css"color: lightmagenta",
-  66 => css"color: lightcyan",
-  67 => css"color: lightwhite"])
+render(x::UnionAll) = render(x.body)
+fields(T) = try fieldnames(T) catch; () end
 
 fade(s) = @dom[:span class="fade" s]
 icon(x) = @dom[:span class="icon $("icon-$x")"]
@@ -520,3 +350,95 @@ render(f::Function) =
 
 isanon(f) = occursin('#', String(nameof(f)))
 name(f::Function) = @dom[:span class=syntax_class(f) isanon(f) ? "λ" : String(nameof(f))]
+
+# Markdown is loose with its types so we need special functions `renderMD`
+render(m::Markdown.MD) = @dom[:div class="markdown" map(renderMD, CodeTools.flatten(m).content)...]
+
+render(x::Union{AbstractDict,AbstractVector,Tuple,NamedTuple,Set}) = begin
+  isempty(x) && return brief(x)
+  expandable(()->body(x), brief(x))
+end
+
+brief(nt::NamedTuple) =
+  @dom[:span
+    [:span class="syntax--support syntax--type" "NamedTuple"]
+    [:span css"color: rgb(104, 110, 122)" "[$(length(nt))]"]]
+
+body(nt::NamedTuple) =
+  @dom[:div
+    (@dom[:div css"display: flex"
+      String(key)
+      [:span css"padding: 0 5px" "="]
+      render(cursor[][key])]
+    for key in keys(nt))...]
+
+body(dict::AbstractDict) =
+  @dom[:div
+    (@dom[:div css"display: flex"
+      render(key)
+      [:span css"padding: 0 10px" "→"]
+      render(cursor[][key])]
+    for key in keys(dict))...]
+
+body(v::Union{Tuple,AbstractVector,Set}) = @dom[:div (@dom[:div render(x)] for x in v)...]
+
+expandable(fn::Function, head) = begin
+  open = private(expandable, false)
+  onmousedown(e) = open[] = !open[]
+  @dom[:div
+    [:div{onmousedown} chevron(open[]) head]
+    if open[]
+      @dom[:div css"padding: 3px 0 3px 20px; overflow: auto; max-height: 500px" fn()]
+    end]
+end
+
+render(e::Atom.EvalError) = begin
+  header = split(sprint(showerror, e.err), '\n')
+  trace = Atom.cliptrace(Atom.errtrace(e))
+  head = @dom[:strong class="error-description" color(header[1])]
+  tail = color(join(header[2:end], '\n'))
+  if isempty(trace)
+    length(header) == 1 ? head : expandable((()->tail), head)
+  else
+    expandable(head) do
+      @dom[:div
+        length(header) == 1 ? nothing : tail
+        render(trace)]
+    end
+  end
+end
+
+"Handle ANSI color sequences"
+color(str) = begin
+  matches = eachmatch(r"\e\[(\d{2})m", str)|>collect
+  isempty(matches) && return @dom[:span str]
+  out = [@dom[:span class=colors[9] str[1:matches[1].offset-1]]]
+  for (i, current) in enumerate(matches)
+    start = current.offset+length(current.match)
+    cutoff = i == endof(matches) ? endof(str) : matches[i+1].offset-1
+    class = colors[parse(UInt8, current.captures[1]) - UInt8(30)]
+    text = str[start:cutoff]
+    push!(out, @dom[:span{class} text])
+  end
+  @dom[:p out...]
+end
+
+const colors = Dict{UInt8,Symbol}(
+  0 => css"color: black",
+  1 => css"color: red",
+  2 => css"color: green",
+  3 => css"color: yellow",
+  4 => css"color: blue",
+  5 => css"color: magenta",
+  6 => css"color: cyan",
+  7 => css"color: white",
+  9 => css"color: lightgray",
+  60 => css"color: lightblack",
+  61 => css"color: #f96666",
+  62 => css"color: lightgreen",
+  63 => css"color: lightyellow",
+  64 => css"color: lightblue",
+  65 => css"color: lightmagenta",
+  66 => css"color: lightcyan",
+  67 => css"color: lightwhite"
+)
