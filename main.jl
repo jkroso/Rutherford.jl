@@ -111,13 +111,16 @@ render(ui::UI) =
 Base.display(ui::UI) = begin
   istaskdone(ui.display_task) || return
   ui.display_task = @async begin
-    try
-      view = Atom.@errs render(ui)
-      ui.view = view isa Atom.EvalError ? render(view) : view
-    catch e
-      @show e
+    state = :ok
+    view = Atom.@errs render(ui)
+    if view isa Atom.EvalError
+      state = :error
+      ui.view = render(view)
+    else
+      ui.view = view
     end
     for device in ui.devices
+      device.state = state
       display(device, ui.view)
     end
   end

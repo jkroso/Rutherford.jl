@@ -199,8 +199,10 @@ connection.client.ipc.handle("render", ({state, dom, id, location}) => {
 
 const top_node = (x) => x === dock_item ? x.element : x.view.view.lastChild
 
-connection.client.ipc.handle("patch", ({id, patch}) => {
-  DOM.patch(patch, top_node(results[id]))
+connection.client.ipc.handle("patch", ({id, patch, state}) => {
+  node = top_node(results[id])
+  node.parentElement.classList.toggle("error", state == "error")
+  DOM.patch(patch, node)
 })
 
 connection.client.ipc.handle("open", ({file, line}) => {

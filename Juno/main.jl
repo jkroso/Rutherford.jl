@@ -89,7 +89,8 @@ evaluate(s::Snippet) =
 init_gui(d::Device, result) = begin
   @destruct {text,id} = d.snippet
   d.state = result isa Atom.EvalError ? :error : :ok
-  if Atom.ends_with_semicolon(text) && d.state == :ok
+  # if it ends in a semicolon then the user doesn't want to see the result
+  if Atom.ends_with_semicolon(text) && state == :ok
     result = icon("check")
   end
   UIs[id] = gui(d, result)
@@ -398,12 +399,13 @@ render(e::Atom.EvalError) = begin
   head = @dom[:strong class="error-description" color(header[1])]
   tail = color(join(header[2:end], '\n'))
   if isempty(trace)
-    length(header) == 1 ? head : expandable((()->tail), head)
-  else
-    expandable(head) do
-      @dom[:div
-        length(header) == 1 ? nothing : tail
-        render(trace)]
+    return length(header) == 1 ? head : expandable((()->tail), head)
+  end
+  expandable(head) do
+    if length(header) == 1
+      render(trace)
+    else
+      @dom[:div tail render(trace)]
     end
   end
 end
