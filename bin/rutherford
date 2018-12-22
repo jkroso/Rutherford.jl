@@ -4,13 +4,13 @@
 @require "github.com/jkroso/SimpleCLI.jl" @CLI
 
 "Creates an Electron window and displays the UI defined in `file` on it"
-@CLI (file::String; version::VersionNumber=latest())
+@CLI (file::String; version::VersionNumber=latest(), console::Bool=false)
 
 const path = joinpath(pwd(), file)
 const mod = @eval module $(Symbol(:⭒, file)) using Kip end
 const ui = Core.eval(mod, :(include($path)))
 
-const window = Window(App(file, version=version))
+const window = Window(App(file, version=version), console=console)
 couple(window, ui)
 
 wait(window)

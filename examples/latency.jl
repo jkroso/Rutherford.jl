@@ -3,11 +3,11 @@
 # This example just renders the most recent user event type as
 # a string. It demonstrates the round trip latency of the system
 #
-@require "github.com/jkroso/Rutherford.jl" UI need
+@require "github.com/jkroso/Rutherford.jl" UI
+@require "github.com/jkroso/Rutherford.jl/State.jl" swap
 @require "github.com/jkroso/DOM.jl" @dom @css_str
 
-UI(Text("Loading")) do cursor
-  change = e->put!(cursor, e)
+UI("Loading") do data
   @dom[:div css"""
             display: flex
             justify-content: space-around
@@ -15,8 +15,8 @@ UI(Text("Loading")) do cursor
             width: 100%
             height: 100%
             """
-            onmousedown=change
-            onmousemove=change
-            onmouseup=change
-    [:pre repr(need(cursor))]]
+            onmousedown=swap
+            onmousemove=swap
+            onmouseup=swap
+    [:pre repr(data)]]
 end

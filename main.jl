@@ -3,7 +3,7 @@
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/write-json.jl"
-@require "./State" TopLevelCursor UIState cursor currentUI
+@require "./State" TopLevelCursor UIState cursor currentUI need
 
 import Sockets: listenany, accept, TCPSocket
 
@@ -25,6 +25,7 @@ mutable struct Window
   view::Node
   UI::Any
   loop::Task
+  state::Symbol
 end
 
 Window(a::App; kwargs...) = begin
@@ -36,7 +37,7 @@ Window(a::App; kwargs...) = begin
     [:body]]
 
   # tell electron to create a window
-  msg(a, title=a.title, kwargs..., html=repr("text/html", initial_view))
+  msg(a; title=a.title, kwargs..., html=repr("text/html", initial_view))
 
   # wait for that window to connect with this process
   sock = accept(server)
@@ -46,7 +47,7 @@ Window(a::App; kwargs...) = begin
     DOM.emit(w, Events.parse_event(line))
   end
 
-  w = Window(sock, initial_view, nothing, loop)
+  w = Window(sock, initial_view, nothing, loop, :ok)
 end
 
 Base.wait(e::Window) = fetch(e.loop)
@@ -69,7 +70,7 @@ mutable struct UI
 end
 
 UI(fn, data) = begin
-  ui = UI(DOM.null_node, fn, [], done_task, TopLevelCursor(data), Dict())
+  ui = UI(DOM.null_node, fn, [], done_task, TopLevelCursor{Any}(data), Dict())
   push!(getfield(ui.data, :UIs), ui)
   ui
 end
@@ -105,7 +106,7 @@ end
 "Generate a DOM view using the UI's current state"
 render(ui::UI) =
   @dynamic! let currentUI = ui, cursor = ui.data
-    ui.render(ui.data)
+    ui.render(need(ui.data))
   end
 
 Base.display(ui::UI) = begin
@@ -120,12 +121,12 @@ Base.display(ui::UI) = begin
       else
         ui.view = view
       end
+      for device in ui.devices
+        device.state = state
+        display(device, ui.view)
+      end
     catch e
       @show e
-    end
-    for device in ui.devices
-      device.state = state
-      display(device, ui.view)
     end
   end
 end
@@ -144,7 +145,10 @@ Base.display(w::Window, view::Node) = begin
   nothing
 end
 
-DOM.emit(w::Window, e::Events.Event) = DOM.emit(w.view, e)
+DOM.emit(w::Window, e::Events.Event) =
+  @dynamic! let currentUI = w.UI, cursor = w.UI.data
+    DOM.emit(w.view, e)
+  end
 
 async(fn::Function, pending::Node; onerror=handle_async_error) = begin
   ui = currentUI[] # deref here because we are using @dynamic! rather than @dynamic

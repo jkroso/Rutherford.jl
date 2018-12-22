@@ -65,38 +65,15 @@ struct KeyCursor{T} <: UIState{T}
 end
 
 """
-`put!` a new value onto `state` by running its current value through `fn`
+`put!` a new value onto `cursor` by running its current value through `fn`
 """
-swap(fn, state::UIState) = begin
-  value = fn(need(state))
-  value != nothing && put!(state, value)
+swap(fn::Function) = begin
+  value = fn(need(cursor[]))
+  value != nothing && put!(cursor[], value)
 end
 
-"""
-Does the same job as `swap()` but with less typing. You can write:
-
-```julia
-@swap cursor cursor + 1
-```
-
-Instead of:
-
-```julia
-swap(cursor) do i
-  i + 1
-end
-```
-"""
-macro swap(cursor, expr)
-  cursor = esc(cursor)
-  temp = esc(gensym(:cursor))
-  data = esc(gensym(:data))
-  :(let $temp=$cursor,
-        $cursor=need($temp),
-        $data=$(esc(expr))
-    $data != nothing && put!($temp, $data)
-  end)
-end
+"`put!` a new value onto `cursor`"
+swap(data) = put!(cursor[], data)
 
 Base.pathof(c::Cursor) = push!(pathof(getfield(c, :parent)), getfield(c, :key))
 Base.pathof(::TopLevelCursor) = []

@@ -8,7 +8,9 @@ const sock = net.connect(Number(params.port))
 readline.createInterface({
   terminal: false,
   input: sock
-}).on('line', line => runtime.mutate(JSON.parse(line)))
+}).on('line', line => {
+  runtime.mutate(JSON.parse(line))
+})
 
 // write an event to the output stream
 const send = (event) => {

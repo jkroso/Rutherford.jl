@@ -146,7 +146,9 @@ connection.client.ipc.handle("render", ({state, dom, id, location}) => {
         getTitle() { return "UI"},
         id
       })
-      var top_node = item.parentNode
+      right_pane.activateItem(dock_item)
+      right_dock.show()
+      var top_node = dock_item.element
       top_node.addEventListener("focusout", (e) => {
         if (!right_pane.focused) node_to_focus = e.target
       }, true)
