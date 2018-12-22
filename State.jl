@@ -30,13 +30,15 @@ UI components to developed without caring what the overal schema of your app's d
 """
 @struct Cursor{T}(parent::UIState, key, value::T) <: UIState{T}
 
+"Works as you would expect except it returns the value unwrapped"
 Base.getproperty(s::UIState, k::Symbol) = getproperty(need(s), k)
 Base.propertynames(c::UIState) = propertynames(need(c))
 
-need(s::UIState) = getfield(s, :value)
-Base.put!(c::Cursor, value) = assoc_in!(getfield(c, :parent), Cons(getfield(c, :key)), value)
 Base.getindex(c::UIState, key::Any) = Cursor(c, key, need(c)[key])
 Base.setindex!(c::UIState, value, key) = assoc_in!(c, Cons(key), value)
+
+need(s::UIState) = getfield(s, :value)
+Base.put!(c::Cursor, value) = assoc_in!(getfield(c, :parent), Cons(getfield(c, :key)), value)
 assoc_in!(c::Cursor, keys, value) = begin
   assoc_in!(getfield(c, :parent), Cons(getfield(c, :key), keys), value)
 end
@@ -44,15 +46,22 @@ assoc_in!(s::UIState, keys, value) = put!(s, assoc_in(need(s), keys => value))
 Base.delete!(c::Cursor) = delete!(getfield(c, :parent), getfield(c, :key))
 Base.delete!(c::Cursor, key) = put!(c, dissoc(need(c), key))
 
+Base.length(s::UIState) = length(need(s))
+Base.keys(s::UIState) = (KeyCursor(k, s) for k in keys(need(s)))
+Base.values(s::UIState) = (Cursor(s, k, v) for (k,v) in pairs(need(s)))
 Base.iterate(s::UIState) = begin
-  p = pairs(need(s))
+  p = pairs(s)
   iterate(s, (p, iterate(p)))
 end
+Base.iterate(s::UIState, (pairs, state)) =
+  if state != nothing
+    value, next = state
+    (value, (pairs, iterate(pairs, next)))
+  end
 
-Base.iterate(s::UIState, (pairs, next)) = begin
-  next == nothing && return nothing
-  (key, value), state = next
-  (Cursor(s, key, value), (pairs, iterate(pairs, state)))
+struct KeyCursor{T} <: UIState{T}
+  value::T
+  parent::UIState
 end
 
 """
@@ -91,6 +100,7 @@ end
 
 Base.pathof(c::Cursor) = push!(pathof(getfield(c, :parent)), getfield(c, :key))
 Base.pathof(::TopLevelCursor) = []
+Base.pathof(c::KeyCursor) = push!(pathof(getfield(c, :parent)), c)
 
 struct PrivateRef
   key::Any

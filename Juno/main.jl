@@ -6,7 +6,7 @@
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/write-json.jl"
 @require "../State" UIState cursor need private
-@require "./render-markdown.jl" renderMD
+@require "./markdown.jl" renderMD
 import Markdown
 import Dates
 
@@ -368,20 +368,21 @@ brief(nt::NamedTuple) =
 body(nt::NamedTuple) =
   @dom[:div
     (@dom[:div css"display: flex"
-      String(key)
+      String(need(key))
       [:span css"padding: 0 5px" "="]
-      render(cursor[][key])]
-    for key in keys(nt))...]
+      render(value)]
+    for (key, value) in cursor[])...]
 
 body(dict::AbstractDict) =
   @dom[:div
     (@dom[:div css"display: flex"
       render(key)
       [:span css"padding: 0 10px" "→"]
-      render(cursor[][key])]
-    for key in keys(dict))...]
+      render(value)]
+    for (key, value) in cursor[])...]
 
-body(v::Union{Tuple,AbstractVector,Set}) = @dom[:div (@dom[:div render(x)] for x in v)...]
+body(v::Union{Tuple,AbstractVector,Set}) =
+  @dom[:div css"> * {display: block}" (render(v) for (k,v) in cursor[])...]
 
 expandable(fn::Function, head) = begin
   open = private(expandable, false)

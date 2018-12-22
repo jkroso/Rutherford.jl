@@ -56,7 +56,7 @@ const done_task = Task(identity)
 done_task.state = :done
 
 """
-An UI manages the presentation and manipulation of value. One UI
+A UI manages the presentation and manipulation of value. One UI
 can be displayed on multiple devices.
 """
 mutable struct UI
@@ -67,12 +67,12 @@ mutable struct UI
   data::TopLevelCursor
   private::Dict{Vector{Any},Dict{Any,Any}}
 end
+
 UI(fn, data) = begin
-  ui = UI(fn, TopLevelCursor(data))
+  ui = UI(DOM.null_node, fn, [], done_task, TopLevelCursor(data), Dict())
   push!(getfield(ui.data, :UIs), ui)
   ui
 end
-UI(fn, data::UIState) = UI(DOM.null_node, fn, [], done_task, data, Dict{Vector{Any},Dict{Any,Any}}())
 
 DOM.emit(ui::UI, e::Events.Event) = begin
   @dynamic! let currentUI = ui, cursor = ui.data
@@ -113,11 +113,15 @@ Base.display(ui::UI) = begin
   ui.display_task = @async begin
     state = :ok
     view = Atom.@errs render(ui)
-    if view isa Atom.EvalError
-      state = :error
-      ui.view = render(view)
-    else
-      ui.view = view
+    try
+      if view isa Atom.EvalError
+        state = :error
+        ui.view = render(view)
+      else
+        ui.view = view
+      end
+    catch e
+      @show e
     end
     for device in ui.devices
       device.state = state
