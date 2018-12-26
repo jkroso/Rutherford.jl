@@ -35,7 +35,7 @@ UI components to developed without caring what the overal schema of your app's d
 Base.getproperty(s::UIState, k::Symbol) = getproperty(need(s), k)
 Base.propertynames(c::UIState) = propertynames(need(c))
 
-Base.getindex(c::UIState, key::Any) = Cursor(c, key, need(c)[key])
+Base.getindex(c::UIState, key::Any) = Cursor(c, key, get(need(c), key))
 Base.setindex!(c::UIState, value, key) = assoc_in!(c, Cons(key), value)
 
 need(s::UIState) = getfield(s, :value)

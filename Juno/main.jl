@@ -196,16 +196,7 @@ render(b::Bool) = syntax(b)
 render(d::Dates.Date) = @dom[:span Dates.format(d, Dates.dateformat"dd U Y")]
 render(d::Dates.DateTime) = @dom[:span Dates.format(d, Dates.dateformat"dd/mm/Y H\h M\m S.s\s")]
 
-header(x) = brief(x)
-header(m::Module) = @dom[:span brief(x) " from " stacklink(getfile(x), 0)]
-brief(x::Module) = @dom[:span class="syntax--keyword syntax--other" replace(repr(x), r"^Main\."=>"")]
-body(x::Module) =
-  @dom[:div css"max-height: 500px"
-    (@dom[:div css"display: flex"
-      [:span string(name)]
-      [:span css"padding: 0 10px" "→"]
-      isdefined(x, name) ? render(getfield(x, name)) : fade("#undef")]
-    for name in names(x, all=true) if !occursin('#', String(name)))...]
+brief(m::Module) = @dom[:span class="syntax--keyword syntax--other" replace(repr(m), r"^Main\."=>"")]
 
 getfile(m::Module) = begin
   if pathof(m) != nothing
@@ -215,6 +206,16 @@ getfile(m::Module) = begin
     mod === m && return file
   end
 end
+
+render(m::Module) =
+  expandable(@dom[:span brief(m) " from " stacklink(getfile(m), 0)]) do
+    @dom[:div css"max-height: 500px"
+      (@dom[:div css"display: flex"
+        [:span String(name)]
+        [:span css"padding: 0 10px" "→"]
+        isdefined(m, name) ? render(cursor[][name]) : fade("#undef")]
+      for name in names(m, all=true) if !occursin('#', String(name)) && name != nameof(m))...]
+  end
 
 "render a chevron symbol that rotates down when open"
 chevron(open) =
