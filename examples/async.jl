@@ -5,8 +5,7 @@
 # from further interactions
 #
 @require "github.com/jkroso/Rutherford.jl/stdlib" TextField data
-@require "github.com/jkroso/DOM.jl" HTML @dom @css_str
-@require "github.com/jkroso/Rutherford.jl" async UI
+@require "github.com/jkroso/Rutherford.jl" async UI @dom @css_str
 @require "github.com/jkroso/Prospects.jl" assoc
 
 const state = assoc(data(TextField), :focused, true)
@@ -19,8 +18,7 @@ UI(state) do state
             flex-direction: column
             padding: 10px 0
             """
-    [TextField input=state
-               css"""
+    [TextField css"""
                width: 100%
                padding: 10px
                border-radius: 3px

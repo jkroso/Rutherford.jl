@@ -1,4 +1,5 @@
 @require "github.com/jkroso/Prospects.jl" need assoc assoc_in dissoc @mutable @struct
+  @require "github.com/MikeInnes/MacroTools.jl" => MacroTools @match
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
 @require "github.com/jkroso/Sequences.jl" Cons
 
@@ -97,3 +98,36 @@ end
 Get a reference to the private state associated with the current cursor
 """
 private(key, default) = PrivateRef(key, default, cursor[], currentUI[])
+
+"""
+Define an event handler that calls the function you define and places the value
+you return on `cursor[]`
+
+```julia
+@dom[:div onmousemove=@handler event -> event.x]
+```
+"""
+macro handler(expr)
+  fn = @match expr begin
+    ((event_, path_) -> body_) => :(($event, $path) -> $body)
+    ((event_) -> body_) => :(($event, _) -> $body)
+    _ => :((_, __) -> $expr)
+  end
+  :(EventHandler(cursor[], $(esc(fn))))
+end
+
+struct EventHandler <: Function
+  cursor::UIState
+  fn::Function
+end
+
+(handler::EventHandler)(event, path) = begin
+  @dynamic! let cursor = handler.cursor
+    returned = handler.fn(event, path)
+    if returned ≡ delete!
+      delete!(handler.cursor)
+    elseif returned !== nothing
+      put!(handler.cursor, returned)
+    end
+  end
+end

@@ -190,8 +190,6 @@ syntax_class(::VersionNumber) = ["syntax--string", "syntax--quoted", "syntax--ot
 syntax_class(::Nothing) = ["syntax--constant"]
 syntax_class(::Function) = ["syntax--support", "syntax--function"]
 
-render(c::UIState) = @dynamic! let cursor = c; render(need(c)) end
-
 render(n::Union{AbstractFloat,Integer}) = @dom[:span class=syntax_class(n) seperate(n)]
 render(x::Union{AbstractString,Regex,Symbol,Char,VersionNumber,Nothing,Number}) = syntax(x)
 render(b::Bool) = syntax(b)
@@ -415,33 +413,32 @@ end
 color(str) = begin
   matches = eachmatch(r"\e\[(\d{2})m", str)|>collect
   isempty(matches) && return @dom[:span str]
-  out = [@dom[:span class=colors[9] str[1:matches[1].offset-1]]]
+  out = [@dom[:span style.color="lightgray" str[1:matches[1].offset-1]]]
   for (i, current) in enumerate(matches)
     start = current.offset+length(current.match)
     cutoff = i == endof(matches) ? endof(str) : matches[i+1].offset-1
-    class = colors[parse(UInt8, current.captures[1]) - UInt8(30)]
+    color = colors[parse(UInt8, current.captures[1]) - UInt8(30)]
     text = str[start:cutoff]
-    push!(out, @dom[:span{class} text])
+    push!(out, @dom[:span{style.color=color} text])
   end
   @dom[:p out...]
 end
 
-const colors = Dict{UInt8,Symbol}(
-  0 => css"color: black",
-  1 => css"color: red",
-  2 => css"color: green",
-  3 => css"color: yellow",
-  4 => css"color: blue",
-  5 => css"color: magenta",
-  6 => css"color: cyan",
-  7 => css"color: white",
-  9 => css"color: lightgray",
-  60 => css"color: lightblack",
-  61 => css"color: #f96666",
-  62 => css"color: lightgreen",
-  63 => css"color: lightyellow",
-  64 => css"color: lightblue",
-  65 => css"color: lightmagenta",
-  66 => css"color: lightcyan",
-  67 => css"color: lightwhite"
-)
+const colors = Dict{UInt8,String}(
+  0 => "black",
+  1 => "red",
+  2 => "green",
+  3 => "yellow",
+  4 => "blue",
+  5 => "magenta",
+  6 => "cyan",
+  7 => "white",
+  9 => "lightgray",
+  60 => "lightblack",
+  61 => "#f96666",
+  62 => "lightgreen",
+  63 => "lightyellow",
+  64 => "lightblue",
+  65 => "lightmagenta",
+  66 => "lightcyan",
+  67 => "lightwhite")

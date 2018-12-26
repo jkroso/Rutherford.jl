@@ -1,9 +1,10 @@
-@require "github.com/jkroso/DOM.jl" => DOM Events Node Container Primitive HTML @dom
+@require "github.com/jkroso/DOM.jl" => DOM Events Node Container Primitive HTML @dom @css_str
+@require "github.com/MikeInnes/MacroTools.jl" => MacroTools @capture postwalk
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/write-json.jl"
-@require "./State" TopLevelCursor UIState cursor currentUI need
+@require "./State" TopLevelCursor UIState cursor currentUI need @handler
 
 import Sockets: listenany, accept, TCPSocket
 
@@ -104,10 +105,17 @@ decouple(w::Window, ui::UI) = begin
 end
 
 "Generate a DOM view using the UI's current state"
-render(ui::UI) =
-  @dynamic! let currentUI = ui, cursor = ui.data
-    ui.render(need(ui.data))
-  end
+render(ui::UI) = @dynamic! let currentUI = ui, cursor = ui.data
+  ui.render(need(ui.data))
+end
+
+"""
+Defining methods that render cursors directly is too verbose. So this method places the cursor on
+the dynamic variable `cursor` and calls `render` with the unwrapped value
+"""
+render(c::UIState) = @dynamic! let cursor = c
+  render(need(c))
+end
 
 Base.display(ui::UI) = begin
   istaskdone(ui.display_task) || return
@@ -180,3 +188,35 @@ DOM.diff(a::AsyncNode, b::AsyncNode) = begin
   a.iscurrent = false # avoid sending messages for out of date promises
   DOM.diff(convert(Primitive, a), convert(Primitive, b))
 end
+
+"""
+Extends the `@dom` macro to provide special syntax for cursor scope refinement
+
+```julia
+@dom[TextField → :input]
+```
+"""
+macro ui(expr)
+  expr = macroexpand(__module__, Expr(:macrocall, getfield(DOM, Symbol("@dom")), __source__, expr))
+  expr = postwalk(expr) do x
+    if @capture(x, (f_ → key_)(attrs_, children_))
+      :($scoped($f, $key, $attrs, $children))
+    else
+      x
+    end
+  end
+  esc(expr)
+end
+
+scoped(fn, key, attrs, children) = begin
+  c = cursor[][key]
+  @dynamic! let cursor = c
+    if applicable(fn, attrs, children)
+      fn(attrs, children)
+    else
+      fn(attrs, children, need(c))
+    end
+  end
+end
+
+export @ui, @handler, @css_str, cursor, render
