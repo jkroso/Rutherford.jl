@@ -1,8 +1,9 @@
 @require "github.com/jkroso/DOM.jl" => DOM @dom @css_str
 @require "github.com/JunoLab/Atom.jl" => Atom
+@require "github.com/jkroso/DOM.jl/html"
 import Markdown
 
-renderMD(s::AbstractString) = @dom[:p s]
+renderMD(s::AbstractString) = @dom[:p parse(MIME("text/html"), s)]
 renderMD(p::Markdown.Paragraph) = @dom[:p map(renderMDinline, vcat(p.content))...]
 renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, vcat(p.content))...]
 renderMD(l::Markdown.LaTeX) = @dom[:latex class="latex block" block=true Atom.latex2katex(l.formula)]
@@ -69,7 +70,7 @@ end
 
 renderMDinline(v::Vector) =
   length(v) == 1 ? renderMDinline(v[1]) : @dom[:span map(renderMDinline, v)...]
-renderMDinline(md::Union{Symbol,AbstractString}) = DOM.Text(string(md))
+renderMDinline(md::Union{Symbol,AbstractString}) = parse(MIME("text/html"), string(md))
 renderMDinline(md::Markdown.Bold) = @dom[:b renderMDinline(md.text)]
 renderMDinline(md::Markdown.Italic) = @dom[:em renderMDinline(md.text)]
 renderMDinline(md::Markdown.Image) = @dom[:img src=md.url alt=md.alt]

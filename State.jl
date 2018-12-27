@@ -69,20 +69,15 @@ struct KeyCursor{T} <: UIState{T}
   parent::UIState
 end
 
-"""
-`put!` a new value onto `cursor` by running its current value through `fn`
-"""
-swap(fn::Function) = begin
-  value = fn(need(cursor[]))
-  value != nothing && put!(cursor[], value)
+struct FieldTypeCursor{T} <: UIState{T}
+  value::T
+  parent::UIState
 end
-
-"`put!` a new value onto `cursor`"
-swap(data) = put!(cursor[], data)
 
 Base.pathof(c::Cursor) = push!(pathof(getfield(c, :parent)), getfield(c, :key))
 Base.pathof(::TopLevelCursor) = []
 Base.pathof(c::KeyCursor) = push!(pathof(getfield(c, :parent)), c)
+Base.pathof(c::FieldTypeCursor) = push!(pathof(getfield(c, :parent)), c)
 
 struct PrivateRef
   key::Any

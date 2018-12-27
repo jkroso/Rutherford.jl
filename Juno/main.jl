@@ -3,10 +3,12 @@
 @require "github.com/JunoLab/CodeTools.jl" => CodeTools
 @require "github.com/jkroso/Destructure.jl" @destruct
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
+@require "github.com/jkroso/Prospects.jl" assoc
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/write-json.jl"
-@require "../State" UIState cursor need private
+@require "../State" UIState cursor need private FieldTypeCursor
 @require "./markdown.jl" renderMD
+using InteractiveUtils
 import Markdown
 import Dates
 
@@ -214,7 +216,7 @@ render(m::Module) = begin
     @dom[:div css"max-height: 500px; max-width: 1000px"
       if isfile(readme)
         expandable(@dom[:h3 "Readme.md"], private(readme, false)) do
-          render(Markdown.parse_file(readme))
+          renderMDFile(readme)
         end
       end
       (@dom[:div css"display: flex"
@@ -225,7 +227,15 @@ render(m::Module) = begin
   end
 end
 
-@require ".."
+renderMDFile(path) = resolveImages(render(Markdown.parse_file(path)), dirname(path))
+
+resolveImages(c::DOM.Node, dir) = c
+resolveImages(c::DOM.Container, dir) = assoc(c, :children, map(c->resolveImages(c, dir), c.children))
+resolveImages(c::DOM.Container{:img}, dir) = begin
+  haskey(c.attrs, :src) || return c
+  src = joinpath(dir, c.attrs[:src])
+  assoc(c, :attrs, assoc(c.attrs, :src, src))
+end
 
 "render a chevron symbol that rotates down when open"
 chevron(open) =
@@ -266,19 +276,29 @@ header(T::DataType) = begin
     brief(T)
   end
 end
+
+render(x::UnionAll) = render(x.body)
+
 render(T::DataType) = begin
   attrs = fields(T)
   isempty(attrs) && return header(T)
   expandable(header(T)) do
     @dom[:div
       (@dom[:div css"display: flex"
-        [:span string(name)]
+        [:span String(name)]
         [:span "::"]
-        render(fieldtype(T, name))]
-      for name in attrs)...]
+        render(FieldTypeCursor(fieldtype(T, name), cursor[]))]
+      for name in attrs)...
+      expandable(@dom[:h4 "Methods"], private(methods, false)) do
+        @dom[:div css"> * {display: block}"
+          (render(m) for m in methodswith(toUnionAll(T), supertypes=true))...]
+      end]
   end
 end
-render(x::UnionAll) = render(x.body)
+
+toUnionAll(T::DataType) = T.name.wrapper
+toUnionAll(U::UnionAll) = U
+
 fields(T) = try fieldnames(T) catch; () end
 
 fade(s) = @dom[:span class="fade" s]
