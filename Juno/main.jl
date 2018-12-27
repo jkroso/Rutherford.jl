@@ -207,15 +207,25 @@ getfile(m::Module) = begin
   end
 end
 
-render(m::Module) =
-  expandable(@dom[:span brief(m) " from " stacklink(getfile(m), 0)]) do
-    @dom[:div css"max-height: 500px"
+render(m::Module) = begin
+  file = getfile(m)
+  readme = joinpath(dirname(file), "Readme.md")
+  expandable(@dom[:span brief(m) " from " stacklink(file, 0)]) do
+    @dom[:div css"max-height: 500px; max-width: 1000px"
+      if isfile(readme)
+        expandable(@dom[:h3 "Readme.md"], private(readme, false)) do
+          render(Markdown.parse_file(readme))
+        end
+      end
       (@dom[:div css"display: flex"
         [:span String(name)]
         [:span css"padding: 0 10px" "→"]
         isdefined(m, name) ? render(cursor[][name]) : fade("#undef")]
       for name in names(m, all=true) if !occursin('#', String(name)) && name != nameof(m))...]
   end
+end
+
+@require ".."
 
 "render a chevron symbol that rotates down when open"
 chevron(open) =
@@ -241,9 +251,9 @@ render(data::T) where T = begin
   expandable(brief(T)) do
     @dom[:div
       (@dom[:div css"display: flex"
-        [:span string(field)]
+        [:span String(field)]
         [:span css"padding: 0 10px" "→"]
-        render(get(data, field))]
+        render(cursor[][field])]
        for field in attrs)...]
   end
 end
@@ -335,7 +345,7 @@ render(m::Base.MethodList) = begin
 end
 
 render(f::Function) =
-  expandable(name(f)) do
+  expandable(name(f), private(f, false)) do
     @dom[:div css"""
               padding: 8px 0
               max-width: 800px
@@ -354,9 +364,16 @@ name(f::Function) = @dom[:span class=syntax_class(f) isanon(f) ? "λ" : String(n
 # Markdown is loose with its types so we need special functions `renderMD`
 render(m::Markdown.MD) = @dom[:div class="markdown" map(renderMD, CodeTools.flatten(m).content)...]
 
-render(x::Union{AbstractDict,AbstractVector,Tuple,NamedTuple,Set}) = begin
+render(x::Union{AbstractDict,AbstractVector,Tuple,NamedTuple}) = begin
   isempty(x) && return brief(x)
   expandable(()->body(x), brief(x))
+end
+
+render(s::Set) = begin
+  isempty(s) && return brief(s)
+  expandable(brief(s)) do
+    @dom[:div css"> * {display: block}" (render(v) for (i,v) in cursor[])...]
+  end
 end
 
 brief(nt::NamedTuple) =
@@ -380,14 +397,15 @@ body(dict::AbstractDict) =
       render(value)]
     for (key, value) in cursor[])...]
 
-body(v::Union{Tuple,AbstractVector,Set}) =
+body(v::Union{Tuple,AbstractVector}) =
   @dom[:div css"> * {display: block}" (render(v) for (k,v) in cursor[])...]
 
-expandable(fn::Function, head) = begin
-  open = private(expandable, false)
+expandable(fn::Function, head, open=private(expandable, false)) = begin
   onmousedown(e) = open[] = !open[]
   @dom[:div
-    [:div{onmousedown} chevron(open[]) head]
+    [:div{onmousedown} css"display: flex; flex-direction: row; align-items: center"
+      chevron(open[])
+      head]
     if open[]
       @dom[:div css"padding: 3px 0 3px 20px; overflow: auto; max-height: 500px" fn()]
     end]

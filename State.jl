@@ -16,12 +16,15 @@ State stores the current state of a UI and provides access to all future states.
 object can be used in multiple UIs. Conceptually State objects are an MVP for reifying time
 in your app.
 """
-@mutable TopLevelCursor{T}(value::T, UIs=[]) <: UIState{T}
+@struct TopLevelCursor{T}(value::T, UIs=[]) <: UIState{T}
 TopLevelCursor(v::T) where T = TopLevelCursor{T}(v)
 
 Base.put!(s::TopLevelCursor, value) = begin
-  setfield!(s, :value, value)
-  foreach(display, getfield(s, :UIs))
+  new_cursor = TopLevelCursor(value)
+  for ui in getfield(s, :UIs)
+    ui.data = new_cursor
+    display(ui)
+  end
 end
 
 """
@@ -50,6 +53,7 @@ Base.delete!(c::Cursor, key) = put!(c, dissoc(need(c), key))
 Base.length(s::UIState) = length(need(s))
 Base.keys(s::UIState) = (KeyCursor(k, s) for k in keys(need(s)))
 Base.values(s::UIState) = (Cursor(s, k, v) for (k,v) in pairs(need(s)))
+Base.pairs(s::UIState{<:Set}) = (KeyCursor(i, s) => Cursor(s, i, v) for (i, v) in enumerate(need(s)))
 Base.iterate(s::UIState) = begin
   p = pairs(s)
   iterate(s, (p, iterate(p)))

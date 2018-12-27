@@ -71,7 +71,7 @@ mutable struct UI
 end
 
 UI(fn, data) = begin
-  ui = UI(DOM.null_node, fn, [], done_task, TopLevelCursor{Any}(data), Dict())
+  ui = UI(DOM.null_node, fn, [], done_task, TopLevelCursor(data), Dict())
   push!(getfield(ui.data, :UIs), ui)
   ui
 end
