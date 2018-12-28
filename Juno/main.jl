@@ -273,7 +273,7 @@ render(data::T) where T = begin
       (@dom[:div css"display: flex"
         [:span String(field)]
         [:span css"padding: 0 10px" "→"]
-        render(cursor[][field])]
+        isdefined(data, field) ? render(cursor[][field]) : fade("#undef")]
        for field in attrs)...]
   end
 end
