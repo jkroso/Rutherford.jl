@@ -251,8 +251,18 @@ chevron(open) =
              """]
 
 "A summary of a datastructure"
-brief(data) =
+brief(data) = render(data)
+brief(data::Union{AbstractDict,AbstractVector,Set,Tuple,NamedTuple}) =
   @dom[:span brief(typeof(data)) [:span css"color: rgb(104, 110, 122)" "[$(length(data))]"]]
+
+brief(u::Union) = @dom[:span
+  [:span class="syntax--support syntax--type" "Union"]
+  [:span "{"]
+  interleave(map(brief, union_params(u)), ",")...
+  [:span "}"]]
+
+union_params(u::Union) = push!(union_params(u.b), u.a)
+union_params(u) = Any[u]
 
 "By default just render the structure of the object"
 render(data::T) where T = begin
@@ -272,8 +282,10 @@ brief(T::DataType) =
   @dom[:span
     [:span class="syntax--support syntax--type" T.name.name]
     if !isempty(T.parameters)
-      @dom[:span [:span "{"] map(brief, T.parameters)... [:span "}"]]
+      @dom[:span [:span "{"] interleave(map(brief, T.parameters), ",")... [:span "}"]]
     end]
+
+interleave(itr, x) = vcat(([a,b] for a=itr, b=(x,))...)[1:end-1]
 
 header(T::DataType) = begin
   if supertype(T) ≠ Any
