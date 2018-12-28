@@ -268,14 +268,23 @@ render(data::T) where T = begin
   end
 end
 
-brief(T::DataType) = @dom[:span class="syntax--support syntax--type" repr(T)]
+brief(T::DataType) =
+  @dom[:span
+    [:span class="syntax--support syntax--type" T.name.name]
+    if !isempty(T.parameters)
+      @dom[:span [:span "{"] map(brief, T.parameters)... [:span "}"]]
+    end]
+
 header(T::DataType) = begin
   if supertype(T) ≠ Any
-    @dom[:span brief(T) " <: " brief(supertype(T))]
+    @dom[:span brief(T) [:span " <: "] brief(supertype(T))]
   else
     brief(T)
   end
 end
+
+brief(t::TypeVar) = @dom[:span repr(t)]
+brief(s::Symbol) = render(s)
 
 render(x::UnionAll) = render(x.body)
 
