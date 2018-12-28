@@ -120,7 +120,7 @@ end
 Base.display(ui::UI) = begin
   istaskdone(ui.display_task) || return
   ui.display_task = @async begin
-    state = :ok
+    state = need(ui.data) isa Atom.EvalError ? :error : :ok
     view = Atom.@errs render(ui)
     try
       if view isa Atom.EvalError
