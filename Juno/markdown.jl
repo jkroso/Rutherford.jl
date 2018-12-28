@@ -76,6 +76,7 @@ renderMDinline(md::Markdown.Italic) = @dom[:em renderMDinline(md.text)]
 renderMDinline(md::Markdown.Image) = @dom[:img src=md.url alt=md.alt]
 renderMDinline(l::Markdown.Link) = @dom[:a href=l.url renderMDinline(l.text)]
 renderMDinline(br::Markdown.LineBreak) = @dom[:br]
+renderMDinline(p::Markdown.Paragraph) = renderMD(p)
 
 renderMDinline(f::Markdown.Footnote) =
   @dom[:a href="#footnote-$(f.id)" class="footnote" [:span "[$(f.id)]"]]
