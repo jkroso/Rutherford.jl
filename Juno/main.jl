@@ -209,14 +209,31 @@ getfile(m::Module) = begin
   end
 end
 
+issubmodule(m::Module) = parentmodule(m) != m && parentmodule(m) != Main
+getreadme(file::AbstractString) = begin
+  dir = dirname(file)
+  path = joinpath(dir, "Readme.md")
+  isfile(path) && return path
+  basename(dir) == "src" || return nothing
+  path = joinpath(dirname(dir), "Readme.md")
+  isfile(path) && return path
+  nothing
+end
+
 render(m::Module) = begin
-  file = getfile(m)
-  readme = joinpath(dirname(file), "Readme.md")
-  expandable(@dom[:span brief(m) " from " stacklink(file, 0)]) do
+  readme = nothing
+  header = if issubmodule(m)
+    brief(m)
+  else
+    file = getfile(m)
+    readme = getreadme(file)
+    @dom[:span brief(m) " from " stacklink(file, 0)]
+  end
+  expandable(header) do
     @dom[:div css"max-height: 500px; max-width: 1000px"
-      if isfile(readme)
+      if readme != nothing
         expandable(@dom[:h3 "Readme.md"], private(readme, false)) do
-          renderMDFile(readme)
+          @dom[:div css"margin-bottom: 20px" renderMDFile(readme)]
         end
       end
       (@dom[:div css"display: flex"
@@ -227,11 +244,11 @@ render(m::Module) = begin
   end
 end
 
-renderMDFile(path) = resolveImages(render(Markdown.parse_file(path)), dirname(path))
+renderMDFile(path) = resolveLinks(render(Markdown.parse_file(path, flavor=Markdown.github)), dirname(path))
 
-resolveImages(c::DOM.Node, dir) = c
-resolveImages(c::DOM.Container, dir) = assoc(c, :children, map(c->resolveImages(c, dir), c.children))
-resolveImages(c::DOM.Container{:img}, dir) = begin
+resolveLinks(c::DOM.Node, dir) = c
+resolveLinks(c::DOM.Container, dir) = assoc(c, :children, map(c->resolveLinks(c, dir), c.children))
+resolveLinks(c::DOM.Container{:img}, dir) = begin
   haskey(c.attrs, :src) || return c
   src = joinpath(dir, c.attrs[:src])
   assoc(c, :attrs, assoc(c.attrs, :src, src))
