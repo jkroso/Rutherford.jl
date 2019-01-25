@@ -146,21 +146,18 @@ const eval_block = () => {
   }))
 }
 
-var dock_item = null
-var node_to_focus = null
-
 // creating it ourselves because ink attaches event handlers to their one
 const result_container = () => {
-  let el = document.createElement('div')
-  el.setAttribute('tabindex', '-1')
-  el.classList.add('ink', 'result', 'inline', 'julia', 'ink-hide', 'loading')
-  setTimeout(() => el.classList.remove('ink-hide'), 20)
+  let el = document.createElement("div")
+  el.setAttribute("tabindex", "-1")
+  el.classList.add("ink", "result", "inline", "julia", "ink-hide", "loading")
+  setTimeout(() => el.classList.remove("ink-hide"), 20)
   el.appendChild(loading_gear)
   return el
 }
 
-const loading_gear = document.createElement('span')
-loading_gear.classList.add('loading', 'icon', 'icon-gear')
+const loading_gear = document.createElement("span")
+loading_gear.classList.add("loading", "icon", "icon-gear")
 
 connection.client.ipc.handle("render", ({state, dom, id}) => {
   const r = results[id]
@@ -217,9 +214,9 @@ connection.client.ipc.handle("render", ({state, dom, id}) => {
 })
 
 connection.client.ipc.handle("patch", ({id, patch, state}) => {
-  node = results[id].view.view.lastChild
-  node.parentElement.classList.toggle("error", state == "error")
-  DOM.patch(patch, node)
+  const top_node = results[id].view.view
+  top_node.classList.toggle("error", state == "error")
+  DOM.patch(patch, top_node.lastChild)
 })
 
 connection.client.ipc.handle("open", ({file, line}) => {
