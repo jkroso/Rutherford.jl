@@ -48,17 +48,7 @@ struct Snippet
   id::Int32
 end
 
-abstract type Device end
-
-mutable struct DockResult <: Device
-  snippet::Snippet
-  state::Symbol
-  ui::Union{UI,Nothing}
-  view::DOM.Node
-  DockResult(s) = new(s, :ok)
-end
-
-mutable struct InlineResult <: Device
+mutable struct InlineResult
   snippet::Snippet
   state::Symbol
   ui::Union{UI,Nothing}
@@ -66,7 +56,7 @@ mutable struct InlineResult <: Device
   InlineResult(s) = new(s, :ok)
 end
 
-msg(::Device, data) = msg(data[:command], data)
+msg(::InlineResult, data) = msg(data[:command], data)
 
 "Get the Module associated with the current file"
 getmodule(path) =
@@ -77,7 +67,6 @@ getmodule(path) =
     end
   end
 
-global dock_result
 const inline_results = Dict{Int32,InlineResult}()
 const UIs = Dict{Int32,UI}()
 
@@ -88,7 +77,7 @@ evaluate(s::Snippet) =
     end
   end
 
-init_gui(d::Device, result) = begin
+init_gui(d::InlineResult, result) = begin
   @destruct {text,id} = d.snippet
   d.state = result isa Atom.EvalError ? :error : :ok
   # if it ends in a semicolon then the user doesn't want to see the result
@@ -104,12 +93,7 @@ Atom.handle("rutherford eval") do data
   snippet = Snippet(text, line, path, id)
   result = evaluate(snippet)
   others = [(r, evaluate(r.snippet)) for r in values(inline_results) if r.snippet.line != line]
-  device = if result isa UI
-    global dock_result = DockResult(snippet)
-  else
-    @isdefined(dock_result) && Base.invokelatest(display, dock_result)
-    inline_results[id] = InlineResult(snippet)
-  end
+  device = inline_results[id] = InlineResult(snippet)
   Base.invokelatest(init_gui, device, result)
   # redraw all other snippets
   for (device, result) in others
@@ -117,14 +101,9 @@ Atom.handle("rutherford eval") do data
   end
 end
 
-Base.display(d::DockResult) = begin
-  d.ui.view = render(d.ui)
-  display(d, d.ui.view)
-end
-
 lastsheet = DOM.CSSNode()
 
-Base.display(d::Device, view::DOM.Node) = begin
+Base.display(d::InlineResult, view::DOM.Node) = begin
   # update CSS if its stale
   if DOM.stylesheets[1] != lastsheet
     global lastsheet = DOM.stylesheets[1]
@@ -134,26 +113,23 @@ Base.display(d::Device, view::DOM.Node) = begin
     patch = DOM.diff(d.view, view)
     patch == nothing || msg("patch", (id=d.snippet.id, patch=patch, state=d.state))
   else
-    msg("render", (state=d.state, id=d.snippet.id, dom=view, location=location(d)))
+    msg("render", (state=d.state, id=d.snippet.id, dom=view))
   end
   d.view = view
 end
 
-location(::InlineResult) = "inline"
-location(::DockResult) = "dock"
-
-couple(device::Device, ui::UI) = begin
+couple(device::InlineResult, ui::UI) = begin
   push!(ui.devices, device)
   device.ui = ui
   display(device, ui)
 end
 
-decouple(i::Device, ui::UI) = begin
+decouple(i::InlineResult, ui::UI) = begin
   deleteat!(ui.devices, findfirst((x->x === i), ui.devices))
   i.ui = nothing
 end
 
-Base.display(d::Device, ui::UI) = begin
+Base.display(d::InlineResult, ui::UI) = begin
   ui.view = render(ui)
   display(d, ui.view)
 end
