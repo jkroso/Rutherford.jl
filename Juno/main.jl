@@ -32,7 +32,9 @@ const event_parsers = Dict{String,Function}(
 
 # TODO: Should emit events on the device rather than the UI
 Atom.handle("event") do id, data
-  DOM.emit(UIs[id], event_parsers[data["type"]](data))
+  ui = inline_displays[id].ui
+  event = event_parsers[data["type"]](data)
+  DOM.emit(ui, event)
 end
 
 Atom.handle("reset module") do file
@@ -67,8 +69,7 @@ getmodule(path) =
     end
   end
 
-const inline_results = Dict{Int32,InlineResult}()
-const UIs = Dict{Int32,UI}()
+const inline_displays = Dict{Int32,InlineResult}()
 
 evaluate(s::Snippet) =
   lock(Atom.evallock) do
@@ -84,16 +85,16 @@ init_gui(d::InlineResult, result) = begin
   if Atom.ends_with_semicolon(text) && state == :ok
     result = icon("check")
   end
-  UIs[id] = gui(d, result)
-  Base.invokelatest(couple, d, UIs[id])
+  Base.invokelatest(couple, d, gui(d, result))
 end
 
 Atom.handle("rutherford eval") do data
   @destruct {"text"=>text, "line"=>line, "path"=>path, "id"=>id} = data
   snippet = Snippet(text, line, path, id)
+  device = InlineResult(snippet)
+  inline_displays[id] = device
   result = evaluate(snippet)
-  others = [(r, evaluate(r.snippet)) for r in values(inline_results) if r.snippet.line != line]
-  device = inline_results[id] = InlineResult(snippet)
+  others = [(r, evaluate(r.snippet)) for r in values(inline_displays) if r.snippet.line != line]
   Base.invokelatest(init_gui, device, result)
   # redraw all other snippets
   for (device, result) in others
@@ -135,8 +136,7 @@ Base.display(d::InlineResult, ui::UI) = begin
 end
 
 Atom.handle("result done") do id
-  delete!(inline_results, id)
-  delete!(UIs, id)
+  delete!(inline_displays, id)
 end
 
 gui(device, result) = UI(render, result)

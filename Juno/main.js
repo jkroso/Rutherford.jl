@@ -201,6 +201,7 @@ connection.client.ipc.handle("render", ({state, dom, id}) => {
   const sendEvent = (e) => {
     connection.client.ipc.msg("event", id, eventJSON(e, top_node.lastChild))
     e.preventDefault()
+    e.stopPropagation()
   }
   for (name in event_converters) {
     top_node.addEventListener(name, sendEvent, true)
