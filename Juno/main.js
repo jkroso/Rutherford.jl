@@ -71,22 +71,10 @@ const mouse_hover_event = (e, top_node) => ({
   path: dom_path(e.target, top_node)
 })
 
-const dom_path = (dom, top_node) => {
-  const indices = []
-  if (!top_node.contains(dom)) return indices
-  while (dom != top_node) {
-    indices.push(indexOf(dom))
-    dom = dom.parentNode
-  }
-  return indices.reverse()
-}
+const dom_path = (dom, top_node) => top_node.contains(dom) ? DOM.dom_path(dom, top_node) : []
 
-const indexOf = (dom) => {
-  var i = 0
-  var children = dom.parentNode.childNodes
-  while (children[i++] != dom);
-  return i
-}
+// The timeout used in DOM is too fast for Atom so we overwrite it
+DOM.attrSetters.isfocused = (el, value) => value && setTimeout(() => el.focus(), 30)
 
 const event_converters = {
   keydown: keyboard_event,
