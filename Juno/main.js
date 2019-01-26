@@ -140,7 +140,7 @@ const result_container = () => {
   el.setAttribute("tabindex", "-1")
   el.classList.add("ink", "result", "inline", "julia", "ink-hide", "loading")
   setTimeout(() => el.classList.remove("ink-hide"), 20)
-  el.appendChild(loading_gear)
+  el.appendChild(loading_gear.cloneNode())
   return el
 }
 
@@ -197,7 +197,7 @@ connection.client.ipc.handle("render", ({state, dom, id}) => {
 
   top_node.classList.toggle("error", state == "error")
   top_node.classList.remove("loading")
-  top_node.replaceChild(DOM.create(dom), loading_gear)
+  top_node.replaceChild(DOM.create(dom), top_node.lastChild)
 
   runtime.workspace.update()
 })
