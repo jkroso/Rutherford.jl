@@ -20,8 +20,9 @@ in your app.
 TopLevelCursor(v::T) where T = TopLevelCursor{T}(v)
 
 Base.put!(s::TopLevelCursor, value) = begin
-  new_cursor = TopLevelCursor(value)
-  for ui in getfield(s, :UIs)
+  UIs = getfield(s, :UIs)
+  new_cursor = TopLevelCursor(value, UIs)
+  for ui in UIs
     ui.data = new_cursor
     display(ui)
   end
