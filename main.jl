@@ -1,4 +1,4 @@
-@require "github.com/jkroso/DOM.jl" => DOM Events Node Container Primitive HTML @dom @css_str
+@require "github.com/jkroso/DOM.jl" => DOM Events Node Container HTML @dom @css_str
 @require "github.com/MikeInnes/MacroTools.jl" => MacroTools @capture postwalk
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
 @require "github.com/JunoLab/Atom.jl" => Atom
@@ -175,8 +175,8 @@ mutable struct AsyncNode <: Node
   task::Task
 end
 
-Base.show(io::IO, m::MIME"application/json", a::AsyncNode) = show(io, m, convert(Primitive, a))
-Base.convert(::Type{Primitive}, a::AsyncNode) =
+Base.show(io::IO, m::MIME"application/json", a::AsyncNode) = show(io, m, convert(Container, a))
+Base.convert(::Type{Container}, a::AsyncNode) =
   if istaskdone(a.task)
     Base.task_result(a.task)
   else
@@ -186,7 +186,7 @@ Base.convert(::Type{Primitive}, a::AsyncNode) =
 DOM.add_attr(a::AsyncNode, key::Symbol, value) = a
 DOM.diff(a::AsyncNode, b::AsyncNode) = begin
   a.iscurrent = false # avoid sending messages for out of date promises
-  DOM.diff(convert(Primitive, a), convert(Primitive, b))
+  DOM.diff(convert(Container, a), convert(Container, b))
 end
 
 """
