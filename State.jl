@@ -1,5 +1,5 @@
 @require "github.com/jkroso/Prospects.jl" need assoc assoc_in dissoc @mutable @struct
-  @require "github.com/MikeInnes/MacroTools.jl" => MacroTools @match
+@require "github.com/MikeInnes/MacroTools.jl" => MacroTools @match
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
 @require "github.com/jkroso/Sequences.jl" Cons
 
