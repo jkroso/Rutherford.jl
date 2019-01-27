@@ -398,9 +398,32 @@ name(f::Function) = @dom[:span class=syntax_class(f) isanon(f) ? "λ" : String(n
 # Markdown is loose with its types so we need special functions `renderMD`
 render(m::Markdown.MD) = @dom[:div class="markdown" map(renderMD, CodeTools.flatten(m).content)...]
 
-render(x::Union{AbstractDict,AbstractVector,Tuple,NamedTuple}) = begin
+render(x::Union{AbstractDict,AbstractVector}) = begin
   isempty(x) && return brief(x)
   expandable(()->body(x), brief(x))
+end
+
+render(t::NamedTuple) = begin
+  length(t) < 5 && return literal(t)
+  expandable(()->body(x), brief(x))
+end
+
+render(t::Tuple) = begin
+  length(t) < 10 && return literal(t)
+  expandable(()->body(x), brief(x))
+end
+
+literal(t::Tuple) = begin
+  content = interleave((render(v) for (k,v) in cursor[]), @dom[:span css"padding: 0 6px 0 0" ','])
+  length(content) == 1 && push!(content, @dom[:span ','])
+  @dom[:span css"display: flex; flex-direction: row" [:span '('] content... [:span ')']]
+end
+
+literal(t::NamedTuple) = begin
+  items = (@dom[:span css"display: flex; flex-direction: row" need(k) '=' render(v)] for (k,v) in cursor[])
+  content = interleave(items, @dom[:span css"padding: 0 6px 0 0" ','])
+  length(content) == 1 && push!(content, @dom[:span ','])
+  @dom[:span css"display: flex; flex-direction: row" [:span '('] content... [:span ')']]
 end
 
 render(s::Set) = begin
