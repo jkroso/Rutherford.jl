@@ -3,9 +3,6 @@
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
 @require "github.com/jkroso/Sequences.jl" Cons
 
-@dynamic! currentUI = nothing
-@dynamic! cursor = nothing
-
 """
 UIStates manage the lifecycle of data in some way
 """
@@ -18,6 +15,9 @@ in your app.
 """
 @struct TopLevelCursor{T}(value::T, UIs=[]) <: UIState{T}
 TopLevelCursor(v::T) where T = TopLevelCursor{T}(v)
+
+const currentUI = Ref{Any}(nothing)
+const cursor = Ref{UIState}(TopLevelCursor(nothing))
 
 Base.put!(s::TopLevelCursor, value) = begin
   UIs = getfield(s, :UIs)
