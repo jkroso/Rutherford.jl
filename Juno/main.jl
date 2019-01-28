@@ -1,4 +1,5 @@
 @require ".." couple decouple UI msg render
+@require "github.com/MikeInnes/MacroTools.jl" rmlines @capture
 @require "github.com/jkroso/DOM.jl" => DOM Events @dom @css_str
 @require "github.com/JunoLab/CodeTools.jl" => CodeTools
 @require "github.com/jkroso/Destructure.jl" @destruct
@@ -518,3 +519,222 @@ const colors = Dict{UInt8,String}(
   65 => "lightmagenta",
   66 => "lightcyan",
   67 => "lightwhite")
+
+const context = Ref{Symbol}(:general)
+
+render(e::Expr) = expr(e)
+
+expr(e::Any) = @dom[:span css"color: #383a42" bracket('(') render(e) bracket(')')]
+expr(e::Nothing) = @dom[:span class="syntax--constant syntax--language syntax--julia" "nothing"]
+expr(r::GlobalRef) = @dom[:span string(r)]
+expr(e::Expr) = expr(e, Val(e.head))
+expr(s::Symbol) =
+  if context[] == :ref && s == :end
+    @dom[:span class="syntax--constant syntax--numeric syntax--julia" "end"]
+  else
+    @dom[:span s]
+  end
+expr(n::Union{Number,String,Char}) = render(n)
+expr(q::QuoteNode) =
+  if q.value isa Symbol
+    render(q.value)
+  end
+
+const comma = @dom[:span class="syntax--meta syntax--bracket syntax--julia" ',']
+const comma_seperator = @dom[:span comma ' ']
+const begin_block = @dom[:span class="syntax--keyword syntax--control syntax--julia" "begin"]
+const end_block = @dom[:span class="syntax--keyword syntax--control syntax--end syntax--julia" "end"]
+const equals = @dom[:span class="syntax--keyword syntax--operator syntax--update syntax--julia" '=']
+const coloncolon = @dom[:span class="syntax--keyword syntax--operator syntax--relation syntax--julia" "::"]
+const kw_for = @dom[:span class="syntax--keyword syntax--control syntax--julia" "for"]
+const and_op = @dom[:span class="syntax--keyword syntax--operator syntax--boolean syntax--julia" "&&"]
+const or_op = @dom[:span class="syntax--keyword syntax--operator syntax--boolean syntax--julia" "||"]
+const dot_op = @dom[:span class="syntax--keyword syntax--operator syntax--dots syntax--julia" '.']
+bracket(c::Char) = @dom[:span class="syntax--meta syntax--bracket syntax--julia" c]
+type(e) = @dom[:span class="syntax--support syntax--type syntax--julia" expr(e)]
+operator(e) =
+  if e == :(:)
+    @dom[:span class="syntax--keyword syntax--operator syntax--range syntax--julia" e]
+  elseif e in [:+ :- :* :/ :^ ://]
+    @dom[:span class="syntax--keyword syntax--operator syntax--arithmetic syntax--julia" e]
+  elseif e == :!
+    @dom[:span class="syntax--keyword syntax--operator syntax--boolean syntax--julia" e]
+  elseif e in [:< :> :>= :<= :(==) :(===)]
+    @dom[:span class="syntax--keyword syntax--operator syntax--relation syntax--julia" e]
+  else
+    error("unimplemented operator $e")
+  end
+
+expr(call, ::Val{:call}) = begin
+  @capture call name_(args__)
+  if name isa Symbol && Base.isoperator(name)
+    if length(args) == 1
+      @dom[:span operator(name) expr(args[1])]
+    else
+      @dom[:span css"> .syntax--arithmetic {padding: 0 0.5em}"
+        interleave(map(expr, args), operator(name))...]
+    end
+  else
+    simple_call(call)
+  end
+end
+
+simple_call(call) = begin
+  @capture call name_(args__)
+  @dom[:span
+    [:span class="syntax--entity syntax--name syntax--function syntax--julia"
+           css"> :first-child {display: inline-flex}"
+      expr(name)]
+    bracket('(')
+    interleave(map(expr, args), comma_seperator)...
+    bracket(')')]
+end
+
+expr(block, ::Val{:block}) = begin
+  block = rmlines(block)
+  length(block.args) == 1 && return expr(block.args[1])
+  @dom[:div css"""
+            display: flex
+            flex-direction: column
+            > *
+              padding-left: 1em
+              &:first-child {padding: 0}
+              &:last-child {padding: 0}
+            """
+    begin_block
+    map(expr, block.args)...
+    end_block]
+end
+
+expr(eq, ::Val{:(=)}) = begin
+  op = context[] == :tuple ? equals : @dom[:span css"padding: 0 0.5em" equals]
+  @dom[:span interleave(map(expr, eq.args), op)...]
+end
+
+expr(eq, ::Val{:kw}) = @dom[:span interleave(map(expr, eq.args), equals)...]
+
+expr(e, ::Val{:(::)}) = begin
+  left, right = e.args
+  @dom[:span expr(left) coloncolon type(right)]
+end
+
+expr(curly, ::Val{:curly}) = begin
+  @capture curly name_{params__}
+  @dom[:span expr(name) bracket('{') interleave(map(expr, params), comma)... bracket('}')]
+end
+
+expr(fn, ::Val{:function}) = begin
+  call, body = fn.args
+  @dom[:div
+    [:span [:span class="syntax--keyword syntax--other syntax--julia" "function"] ' ' expr(call)]
+    [:div css"padding-left: 1em; display: flex; flex-direction: column"
+      map(expr, rmlines(body).args)...]
+    end_block]
+end
+
+expr(c, ::Val{:comprehension}) = comprehension(c.args[1], bracket('['), bracket(']'))
+expr(g, ::Val{:generator}) = comprehension(g, bracket('('), bracket(')'))
+
+comprehension(g, open, close) = begin
+  body = g.args[1]
+  assignments = g.args[2:end]
+  @dom[:span open expr(body) ' ' kw_for ' '
+    interleave(map(expr, assignments), comma_seperator)...
+    close]
+end
+
+expr(t, ::Val{:tuple}) = begin
+  content = @dynamic! let context = :tuple
+    interleave(map(expr, t.args), comma_seperator)
+  end
+  length(content) == 1 && push!(content, comma)
+  @dom[:span bracket('(') content... bracket(')')]
+end
+
+expr(v, ::Val{:vect}) = begin
+  @dom[:span bracket('[') interleave(map(expr, v.args), comma_seperator)... bracket(']')]
+end
+
+expr(v, ::Val{:hcat}) = begin
+  @dom[:span bracket('[') interleave(map(expr, v.args), ' ')... bracket(']')]
+end
+
+expr(v, ::Val{:vcat}) = begin
+  rows = v.args
+  lines = (row(e, i==length(rows)) for (i, e) in enumerate(rows))
+  @dom[:div css"""
+            > div
+              padding-left: 0.6em
+              &:nth-child(2) {display: inline; padding: 0}
+            """ bracket('[') lines...]
+end
+
+row(e, islast) = begin
+  items = interleave(map(expr, e.args), ' ')
+  push!(items, islast ? bracket(']') : @dom ';')
+  @dom[:div items...]
+end
+
+expr(r, ::Val{:ref}) = begin
+  @capture r ref_[args__]
+  vals = @dynamic! let context = :ref
+    map(expr, args)
+  end
+  @dom[:span expr(ref) bracket('[') interleave(vals, comma_seperator)... bracket(']')]
+end
+
+const kw_const = @dom[:span class="syntax--keyword syntax--storage syntax--modifier syntax--julia" "const"]
+
+expr(c, ::Val{:const}) = begin
+  @dom[:span css"> :last-child {display: inline-flex}" kw_const ' ' expr(c.args[1])]
+end
+
+const kw_if = @dom[:span class="syntax--keyword syntax--control syntax--julia" "if"]
+const kw_else = @dom[:span class="syntax--keyword syntax--control syntax--julia" "else"]
+const kw_elseif = @dom[:span class="syntax--keyword syntax--control syntax--julia" "elseif"]
+
+expr(cond, ::Val{:if}) = conditional(cond, kw_if)
+
+conditional(cond, kw) = begin
+  pred, branch = cond.args
+  if !Meta.isexpr(branch, :block)
+    branch = Expr(:block, branch)
+  else
+    branch = rmlines(branch)
+  end
+  @dom[:div
+    [:span kw ' ' expr(pred)]
+    [:div css"padding-left: 1em" map(expr, branch.args)...]
+    length(cond.args) == 3 ? altbranch(cond.args[3]) : end_block]
+end
+
+altbranch(e) =
+  if Meta.isexpr(e, :block)
+    elsebranch(e)
+  elseif Meta.isexpr(e, :elseif)
+    conditional(e, kw_elseif)
+  else
+    elsebranch(Expr(:block, e))
+  end
+
+elsebranch(e) =
+  @dom[:div
+    kw_else
+    [:div css"padding-left: 1em" map(expr, rmlines(e).args)...]
+    end_block]
+
+binary(e, op) = @dom[:span interleave(map(expr, e.args), op)...]
+expr(and, ::Val{:&&}) = binary(and, @dom[:span ' ' op ' '])
+expr(or,  ::Val{:||}) = binary(or,  @dom[:span ' ' op ' '])
+
+expr(dot, ::Val{:.}) = begin
+  left, right = dot.args
+  r = if right isa QuoteNode && right.value isa Symbol
+    expr(right.value)
+  elseif Meta.isexpr(right, :tuple) && length(right.args) == 1
+    @dom[:span bracket('(') expr(right.args[1]) bracket(')')]
+  else
+    expr(right)
+  end
+  @dom[:span expr(left) dot_op r]
+end
