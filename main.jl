@@ -4,7 +4,7 @@
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/write-json.jl"
-@require "./State" TopLevelCursor UIState cursor currentUI need @handler
+@require "./State" TopLevelCursor UIState cursor currentUI need
 
 import Sockets: listenany, accept, TCPSocket
 
@@ -236,9 +236,14 @@ end
 "Wrap `fn` so it will always be invoked with the `cursor` in its current state"
 handler(fn) = begin
   state = cursor[]
-  (args...) -> @dynamic! let cursor = state
-    fn(args...)
+  maxargs = max(map(m->m.nargs-1, methods(fn))...)
+  if maxargs == 2
+    (event, path) -> @dynamic! let cursor = state; fn(event, path) end
+  elseif maxargs == 1
+    (event, path) -> @dynamic! let cursor = state; fn(event) end
+  else
+    (event, path) -> @dynamic! let cursor = state; fn() end
   end
 end
 
-export @ui, @handler, @css_str, cursor, render
+export @ui, @css_str, cursor, render
