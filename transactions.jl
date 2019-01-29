@@ -3,9 +3,11 @@
 @require "github.com/jkroso/Prospects.jl" assoc need
 @require "./State.jl" UIState cursor Cursor currentUI TopLevelCursor
 
-"Reverse the affect of a change"
-function undo end
-
+"""
+A `Change` represents a transformation that could be applied to a data structure.
+Its like a git diff. A one argument function can serve the same purpose but for now
+I'm using a special type since it is simpler to implement methods on.
+"""
 abstract type Change end
 
 struct Merge <: Change
@@ -45,70 +47,10 @@ globalize(c::Change, cursor::Cursor) = begin
 end
 
 
-"""
-Define an event handler that calls the function you define and places the value
-you return on `cursor[]`
-
-```julia
-@dom[:div onmousemove=@handler event -> event.x]
-```
-"""
-macro handler(expr)
-  fn = @match expr begin
-    (f_(event_, path_) -> body_) => expr
-    (f_(event_) = body_) => :($f($event, _) = $body)
-    (f_() = body_) => :($f(_, __) = $body)
-  end
-  :(EventHandler(cursor[], $(esc(fn))))
-end
-
-struct EventHandler <: Function
-  cursor::UIState
-  fn::Function
-end
-
-function (handler::EventHandler)(event, path)
-  @dynamic! let cursor = handler.cursor
-    handler.fn(event, path)
-  end
-end
-
-"Parse a `Change`"
-macro change(expr)
-  transform(expr)
-end
-
-"Parse a `Change` and apply it to the state of the `currentUI`"
-macro transact(expr)
-  quote
-    change = globalize($(transform(expr)), cursor[])
-    ui = currentUI[]
-    put!(ui.data, apply(change, need(ui.data)))
-    nothing
-  end
-end
-
-const types = (merge=Merge, assoc=Assoc)
-
-transform(s::Symbol) = esc(s)
-transform(x) = x
-transform(expr::Expr) =
-  @match expr begin
-    (f_(params__)) => :($(types[f])($(map(transform_param, params)...)))
-    _ => error("unknown format $(repr(expr))")
-  end
-
-transform_param(expr) = begin
-  @match expr begin
-    (_(__)) => transform(expr)
-    (kvs__,) => Expr(:tuple, map(transform_kv, kvs)...)
-    _ => esc(expr)
-  end
-end
-
-transform_kv(kv) = begin
-  @match kv begin
-    (k_=v_) => :($(transform(k))=$(transform(v)))
-    _ => error("unknown format $kv")
-  end
+"`globalize` a `change` and apply it to the state of the `currentUI`"
+transact(change::Change) = begin
+  ui = currentUI[]
+  change = globalize(change, cursor[])
+  put!(ui.data, apply(change, need(ui.data)))
+  nothing
 end
