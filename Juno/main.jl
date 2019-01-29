@@ -406,12 +406,12 @@ end
 
 render(t::NamedTuple) = begin
   length(t) < 5 && return literal(t)
-  expandable(()->body(x), brief(x))
+  expandable(()->body(t), brief(t))
 end
 
 render(t::Tuple) = begin
   length(t) < 10 && return literal(t)
-  expandable(()->body(x), brief(x))
+  expandable(()->body(t), brief(t))
 end
 
 literal(t::Tuple) = begin
