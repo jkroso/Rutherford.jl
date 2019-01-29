@@ -189,6 +189,18 @@ DOM.diff(a::AsyncNode, b::AsyncNode) = begin
   DOM.diff(convert(Container, a), convert(Container, b))
 end
 
+const event_names = (:onkeyup,
+                     :onkeydown,
+                     :onmousemove,
+                     :onmousedown,
+                     :onmouseup,
+                     :onclick,
+                     :ondblclick,
+                     :onmouseout,
+                     :onmouseover,
+                     :onresize,
+                     :onscroll)
+
 """
 Extends the `@dom` macro to provide special syntax for cursor scope refinement
 
@@ -199,7 +211,9 @@ Extends the `@dom` macro to provide special syntax for cursor scope refinement
 macro ui(expr)
   expr = macroexpand(__module__, Expr(:macrocall, getfield(DOM, Symbol("@dom")), __source__, expr))
   expr = postwalk(expr) do x
-    if @capture(x, (f_ → key_)(attrs_, children_))
+    if @capture(x, $(GlobalRef(DOM, :(=>)))(:key_, value_)) && key in event_names
+      :($(QuoteNode(key)) => $handler($value))
+    elseif @capture(x, (f_ → key_)(attrs_, children_))
       :($scoped($f, $key, $attrs, $children))
     else
       x
@@ -216,6 +230,14 @@ scoped(fn, key, attrs, children) = begin
     else
       fn(attrs, children, need(c))
     end
+  end
+end
+
+"Wrap `fn` so it will always be invoked with the `cursor` in its current state"
+handler(fn) = begin
+  state = cursor[]
+  (args...) -> @dynamic! let cursor = state
+    fn(args...)
   end
 end
 
