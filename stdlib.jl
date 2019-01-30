@@ -1,42 +1,47 @@
 @require "github.com/jkroso/Destructure.jl" @destruct
-@require "github.com/jkroso/Prospects.jl" assoc
-@require "github.com/jkroso/DOM.jl" @dom emit
-@require "./State.jl" @handler need cursor
+@require "github.com/jkroso/Prospects.jl" assoc need
+@require "github.com/jkroso/DOM.jl" emit
+@require "./transactions.jl" transact Merge Assoc
+@require "." @ui cursor
 
 "Get the default data for a UI component"
 function data end
 
 TextField(attrs, children, data=need(cursor[])) = begin
   @destruct {value, :focused=>isfocused, editpoint} = data
-  onkeydown = @handler (e, path) -> begin
+  onkeydown(e, path) = begin
     if e.key == "Enter"
       emit(path, :onsubmit, value)
     elseif e.key == "Backspace"
-      assoc(data, :value, string(value[1:editpoint-1], value[editpoint+1:end]),
-                  :editpoint, max(editpoint - 1, 0))
+      str = string(value[1:editpoint-1], value[editpoint+1:end])
+      Merge((value=str, editpoint=max(editpoint - 1, 0))) |> transact
+      str == value || emit(path, :onchange, str)
     elseif e.key == "Delete"
-      assoc(data, :value, string(value[1:editpoint], value[editpoint+2:end]))
+      str = string(value[1:editpoint], value[editpoint+2:end])
+      Assoc(:value, str) |> transact
+      str == value || emit(path, :onchange, str)
     elseif e.key == "ArrowLeft"
-      assoc(data, :editpoint, max(editpoint - 1, 0))
+      Assoc(:editpoint, max(editpoint - 1, 0)) |> transact
     elseif e.key == "Home"
-      assoc(data, :editpoint, 0)
+      Assoc(:editpoint, 0) |> transact
     elseif e.key == "ArrowRight"
-      assoc(data, :editpoint, min(editpoint + 1, length(value)))
+      Assoc(:editpoint, min(editpoint + 1, length(value))) |> transact
     elseif e.key == "End"
-      assoc(data, :editpoint, length(value))
+      Assoc(:editpoint, length(value)) |> transact
     elseif length(e.key) == 1
-      assoc(data, :value, string(value[1:editpoint], e.key, value[editpoint+1:end]),
-                  :editpoint, editpoint + 1)
+      str = string(value[1:editpoint], e.key, value[editpoint+1:end])
+      Merge((value=str, editpoint=editpoint + 1)) |> transact
+      emit(path, :onchange, str)
     end
   end
-  @dom[:input{:type=:text,
-              isfocused,
-              onkeydown,
-              selectionStart=editpoint,
-              selectionEnd=editpoint,
-              size=length(value) + 1,
-              value,
-              attrs...}]
+  @ui[:input{:type=:text,
+             isfocused,
+             onkeydown,
+             selectionStart=editpoint,
+             selectionEnd=editpoint,
+             size=length(value) + 1,
+             value,
+             attrs...}]
 end
 
 data(::typeof(TextField)) = data(TextField, "")
