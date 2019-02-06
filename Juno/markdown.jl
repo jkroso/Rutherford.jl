@@ -3,6 +3,7 @@
 @require "github.com/jkroso/DOM.jl/html"
 import Markdown
 
+renderMD(v::Vector) = @dom[:div map(renderMD, v)...]
 renderMD(s::AbstractString) = @dom[:p parse(MIME("text/html"), s)]
 renderMD(p::Markdown.Paragraph) = @dom[:p map(renderMDinline, vcat(p.content))...]
 renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, vcat(p.content))...]

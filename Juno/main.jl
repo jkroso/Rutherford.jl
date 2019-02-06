@@ -531,6 +531,8 @@ expr(e::Expr) = expr(e, Val(e.head))
 expr(s::Symbol) =
   if context[] == :ref && s == :end
     @dom[:span class="syntax--constant syntax--numeric syntax--julia" "end"]
+  elseif s == :nothing
+    expr(nothing)
   else
     @dom[:span s]
   end
@@ -738,3 +740,24 @@ expr(dot, ::Val{:.}) = begin
   end
   @dom[:span expr(left) dot_op r]
 end
+
+expr(meta, ::Val{:meta}) = begin
+  @dom[:span "\$(" expr(Expr(:call, :Expr, QuoteNode(:meta), QuoteNode(meta.args[1]))) ')']
+end
+
+expr(struc, ::Val{:struct}) = begin
+  mutable, name, body = struc.args
+  @dom[:div
+    [:span
+      [:span class="syntax--keyword syntax--other syntax--julia" "$(mutable ? "mutable " : "")struct "]
+      expr(name)]
+    [:div css"""
+          display: flex
+          flex-direction: column
+          padding-left: 1em
+          """
+      map(expr, rmlines(body).args)...]
+    end_block]
+end
+
+expr(params, ::Val{:parameters}) = @dom[:span ';' interleave(map(expr, params.args), ", ")...]
