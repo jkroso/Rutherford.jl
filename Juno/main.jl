@@ -552,6 +552,11 @@ const kw_for = @dom[:span class="syntax--keyword syntax--control syntax--julia" 
 const and_op = @dom[:span class="syntax--keyword syntax--operator syntax--boolean syntax--julia" "&&"]
 const or_op = @dom[:span class="syntax--keyword syntax--operator syntax--boolean syntax--julia" "||"]
 const dot_op = @dom[:span class="syntax--keyword syntax--operator syntax--dots syntax--julia" '.']
+const kw_if = @dom[:span class="syntax--keyword syntax--control syntax--julia" "if"]
+const kw_else = @dom[:span class="syntax--keyword syntax--control syntax--julia" "else"]
+const kw_elseif = @dom[:span class="syntax--keyword syntax--control syntax--julia" "elseif"]
+const kw_subclass = @dom[:span class="syntax--keyword syntax--operator syntax--relation syntax--julia" "<:"]
+const kw_where = @dom[:span class="syntax--keyword syntax--other syntax--julia" "where"]
 bracket(c::Char) = @dom[:span class="syntax--meta syntax--bracket syntax--julia" c]
 type(e) = @dom[:span class="syntax--support syntax--type syntax--julia" expr(e)]
 operator(e) =
@@ -622,7 +627,10 @@ end
 
 expr(curly, ::Val{:curly}) = begin
   @capture curly name_{params__}
-  @dom[:span expr(name) bracket('{') interleave(map(expr, params), comma)... bracket('}')]
+  content = @dynamic! let context = :curlies
+    map(expr, params)
+  end
+  @dom[:span expr(name) bracket('{') interleave(content, comma)... bracket('}')]
 end
 
 expr(fn, ::Val{:function}) = begin
@@ -691,10 +699,6 @@ expr(c, ::Val{:const}) = begin
   @dom[:span css"> :last-child {display: inline-flex}" kw_const ' ' expr(c.args[1])]
 end
 
-const kw_if = @dom[:span class="syntax--keyword syntax--control syntax--julia" "if"]
-const kw_else = @dom[:span class="syntax--keyword syntax--control syntax--julia" "else"]
-const kw_elseif = @dom[:span class="syntax--keyword syntax--control syntax--julia" "elseif"]
-
 expr(cond, ::Val{:if}) = conditional(cond, kw_if)
 
 conditional(cond, kw) = begin
@@ -761,3 +765,10 @@ expr(struc, ::Val{:struct}) = begin
 end
 
 expr(params, ::Val{:parameters}) = @dom[:span ';' interleave(map(expr, params.args), ", ")...]
+
+expr(e, ::Val{:<:}) = begin
+  padding = context[] == :curlies ? css"> :nth-child(2) {padding: 0 0.15em}" : css"> :nth-child(2) {padding: 0 0.5em}"
+  @dom[:span class=padding expr(e.args[1]) kw_subclass expr(e.args[2])]
+end
+
+expr(e, ::Val{:where}) = @dom[:span expr(e.args[1]) ' ' kw_where ' ' expr(e.args[2])]
