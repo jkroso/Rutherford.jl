@@ -778,3 +778,28 @@ expr(e, ::Val{:<:}) = begin
 end
 
 expr(e, ::Val{:where}) = binary(e, @dom[:span ' ' kw_where ' '])
+
+expr(e, ::Val{:break}) = @dom[:span class="syntax--keyword syntax--control syntax--julia" "break"]
+expr(e, ::Val{:continue}) = @dom[:span class="syntax--keyword syntax--control syntax--julia" "continue"]
+expr(e, ::Val{:while}) = begin
+  cond, body = e.args
+  @dom[:div
+    [:span [:span class="syntax--keyword syntax--control syntax--julia" "while"] ' ' expr(cond)]
+    [:div css"padding-left: 1em; display: flex; flex-direction: column"
+      map(expr, rmlines(body).args)...]
+    end_block]
+end
+
+expr(e, ::Val{:for}) = begin
+  assignments, body = e.args
+  nodes = if Meta.isexpr(assignments, :block)
+    map(expr, rmlines(assignments).args)
+  else
+    [expr(assignments)]
+  end
+  @dom[:div
+    [:span kw_for ' ' interleave(nodes, ", ")...]
+    [:div css"padding-left: 1em; display: flex; flex-direction: column"
+      map(expr, rmlines(body).args)...]
+    end_block]
+end
