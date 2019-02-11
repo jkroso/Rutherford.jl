@@ -246,6 +246,7 @@ chevron(open) =
 
 "A summary of a datastructure"
 brief(data) = render(data)
+brief(u::UnionAll) = brief(u.body)
 brief(data::Union{AbstractDict,AbstractVector,Set,Tuple,NamedTuple}) =
   @dom[:span brief(typeof(data)) [:span css"color: rgb(104, 110, 122)" "[$(length(data))]"]]
 
@@ -276,14 +277,15 @@ brief(T::DataType) =
   @dom[:span
     [:span class="syntax--support syntax--type" T.name.name]
     if !isempty(T.parameters)
-      @dom[:span [:span "{"] interleave(map(brief, T.parameters), ",")... [:span "}"]]
+      @dom[:span css"display: inline-flex; flex-direction: row"
+        [:span "{"] interleave(map(brief, T.parameters), ",")... [:span "}"]]
     end]
 
 interleave(itr, x) = vcat(([a,b] for a=itr, b=(x,))...)[1:end-1]
 
 header(T::DataType) = begin
   if supertype(T) ≠ Any
-    @dom[:span brief(T) [:span " <: "] brief(supertype(T))]
+    @dom[:span brief(T) ' ' kw_subclass ' ' brief(supertype(T))]
   else
     brief(T)
   end
