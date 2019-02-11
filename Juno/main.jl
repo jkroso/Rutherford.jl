@@ -563,13 +563,17 @@ operator(e) =
   if e == :(:)
     @dom[:span class="syntax--keyword syntax--operator syntax--range syntax--julia" e]
   elseif e in [:+ :- :* :/ :^ ://]
-    @dom[:span class="syntax--keyword syntax--operator syntax--arithmetic syntax--julia" e]
+    @dom[:span class="syntax--keyword syntax--operator syntax--arithmetic syntax--julia" e == :* ? :× : e]
   elseif e == :!
     @dom[:span class="syntax--keyword syntax--operator syntax--boolean syntax--julia" e]
   elseif e in [:< :> :>= :<= :(==) :(===)]
     @dom[:span class="syntax--keyword syntax--operator syntax--relation syntax--julia" e]
+  elseif e in [:| :&]
+    @dom[:span class="syntax--keyword syntax--operator syntax--bitwise syntax--julia" e]
+  elseif e in [:>> :<< :<<< :>>>]
+    @dom[:span class="syntax--keyword syntax--operator syntax--shift syntax--julia" e]
   else
-    error("unimplemented operator $e")
+    @dom[:span class="syntax--keyword syntax--operator syntax--julia" e]
   end
 
 expr(call, ::Val{:call}) = begin
@@ -577,6 +581,8 @@ expr(call, ::Val{:call}) = begin
   if name isa Symbol && Base.isoperator(name)
     if length(args) == 1
       @dom[:span operator(name) expr(args[1])]
+    elseif name == :* && args[1] isa Real && args[2] isa Symbol
+      @dom[:span map(expr, args)...]
     else
       @dom[:span css"> .syntax--arithmetic {padding: 0 0.5em}"
         interleave(map(expr, args), operator(name))...]
