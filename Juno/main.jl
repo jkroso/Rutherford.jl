@@ -730,8 +730,8 @@ elsebranch(e) =
     end_block]
 
 binary(e, op) = @dom[:span interleave(map(expr, e.args), op)...]
-expr(and, ::Val{:&&}) = binary(and, @dom[:span ' ' op ' '])
-expr(or,  ::Val{:||}) = binary(or,  @dom[:span ' ' op ' '])
+expr(and, ::Val{:&&}) = binary(and, @dom[:span ' ' and_op ' '])
+expr(or,  ::Val{:||}) = binary(or,  @dom[:span ' ' or_op ' '])
 
 expr(dot, ::Val{:.}) = begin
   left, right = dot.args
