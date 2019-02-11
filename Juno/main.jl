@@ -556,6 +556,7 @@ const kw_if = @dom[:span class="syntax--keyword syntax--control syntax--julia" "
 const kw_else = @dom[:span class="syntax--keyword syntax--control syntax--julia" "else"]
 const kw_elseif = @dom[:span class="syntax--keyword syntax--control syntax--julia" "elseif"]
 const kw_subclass = @dom[:span class="syntax--keyword syntax--operator syntax--relation syntax--julia" "<:"]
+const kw_where = @dom[:span class="syntax--keyword syntax--other syntax--julia" "where"]
 bracket(c::Char) = @dom[:span class="syntax--meta syntax--bracket syntax--julia" c]
 type(e) = @dom[:span class="syntax--support syntax--type syntax--julia" expr(e)]
 operator(e) =
@@ -770,5 +771,4 @@ expr(e, ::Val{:<:}) = begin
   @dom[:span class=padding expr(e.args[1]) kw_subclass expr(e.args[2])]
 end
 
-const kw_where = @dom[:span class="syntax--keyword syntax--other syntax--julia" " where "]
-expr(e, ::Val{:where}) = @dom[:span interleave(map(expr, e.args), kw_where)...]
+expr(e, ::Val{:where}) = binary(e, @dom[:span ' ' kw_where ' '])
