@@ -158,7 +158,7 @@ seperate(str::String, sep = ",", k = 3) = begin
   join([join(groups, sep), parts[2]], '.')
 end
 
-syntax(x) = @dom[:span class=syntax_class(x) repr(x)]
+syntax(x) = @dom[:span class="syntax--language syntax--julia" class=syntax_class(x) repr(x)]
 syntax_class(n::Bool) = ["syntax--constant", "syntax--boolean"]
 syntax_class(x::Number) = ["syntax--constant", "syntax--numeric"]
 syntax_class(::AbstractString) = ["syntax--string", "syntax--quoted", "syntax--double"]
@@ -168,9 +168,10 @@ syntax_class(::Char) = ["syntax--string", "syntax--quoted", "syntax--single"]
 syntax_class(::VersionNumber) = ["syntax--string", "syntax--quoted", "syntax--other"]
 syntax_class(::Nothing) = ["syntax--constant"]
 syntax_class(::Function) = ["syntax--support", "syntax--function"]
+syntax_class(e::Missing) = []
 
-render(n::Union{AbstractFloat,Integer}) = @dom[:span class=syntax_class(n) seperate(n)]
-render(x::Union{AbstractString,Regex,Symbol,Char,VersionNumber,Nothing,Number}) = syntax(x)
+render(n::Union{AbstractFloat,Integer}) = @dom[:span class="syntax--language syntax--julia syntax--constant syntax--numeric" seperate(n)]
+render(x::Union{AbstractString,Regex,Symbol,Char,VersionNumber,Nothing,Number,Missing}) = syntax(x)
 render(b::Bool) = syntax(b)
 render(d::Dates.Date) = @dom[:span Dates.format(d, Dates.dateformat"dd U Y")]
 render(d::Dates.DateTime) = @dom[:span Dates.format(d, Dates.dateformat"dd/mm/Y H\h M\m S.s\s")]
