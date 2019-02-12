@@ -539,7 +539,14 @@ expr(s::Symbol) =
 expr(n::Union{Number,String,Char}) = render(n)
 expr(q::QuoteNode) =
   if q.value isa Symbol
-    render(q.value)
+    ast = Meta.parse(repr(q.value))
+    if ast isa QuoteNode
+      @dom[:span class="syntax--constant syntax--other syntax--symbol syntax--julia" repr(q.value)]
+    else
+      expr(ast)
+    end
+  else
+    @dom[:span ':' bracket('(') render(q.value) bracket(')')]
   end
 
 expr(string, ::Val{:string}) = begin
@@ -551,6 +558,24 @@ end
 
 render_interp(x::String) = x
 render_interp(x) = @dom[:span class="syntax--variable syntax--interpolation syntax--julia" "\$(" render(x) ')']
+
+expr(q, ::Val{:quote}) = begin
+  @dom[:div
+    [:span class="syntax--keyword syntax--other syntax--julia" "quote"]
+    [:div css"padding-left: 1em; display: flex; flex-direction: column"
+      map(expr, rmlines(q).args)...]
+    end_block]
+end
+
+expr(dolla, ::Val{:$}) = begin
+  value = dolla.args[1]
+  is_simple = value isa Union{Symbol,Number}
+  @dom[:span
+    [:span class="syntax--keyword syntax--operator syntax--interpolation syntax--julia" '$']
+    if !is_simple bracket('(') end
+    expr(value)
+    if !is_simple bracket(')') end]
+end
 
 const comma = @dom[:span class="syntax--meta syntax--bracket syntax--julia" ',']
 const comma_seperator = @dom[:span comma ' ']
