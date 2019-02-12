@@ -525,17 +525,16 @@ const context = Ref{Symbol}(:general)
 
 render(e::Expr) = expr(e)
 
-expr(e::Any) = @dom[:span css"color: #383a42" bracket('(') render(e) bracket(')')]
-expr(e::Nothing) = @dom[:span class="syntax--constant syntax--language syntax--julia" "nothing"]
-expr(r::GlobalRef) = @dom[:span string(r)]
 expr(e::Expr) = expr(e, Val(e.head))
+expr(e::Any) = @dom[:span css"color: #383a42" bracket('(') render(e) bracket(')')]
+expr(r::GlobalRef) = @dom[:span string(r)]
 expr(s::Symbol) =
   if context[] == :ref && s == :end
     @dom[:span class="syntax--constant syntax--numeric syntax--julia" "end"]
   elseif s == :nothing
-    expr(nothing)
+    @dom[:span class="syntax--constant syntax--language syntax--julia" "nothing"]
   else
-    @dom[:span s]
+    @dom[:span class="syntax--language syntax--julia" s]
   end
 expr(n::Union{Number,String,Char}) = render(n)
 expr(q::QuoteNode) =
