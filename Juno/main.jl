@@ -542,6 +542,16 @@ expr(q::QuoteNode) =
     render(q.value)
   end
 
+expr(string, ::Val{:string}) = begin
+  @dom[:span class="syntax--string syntax--quoted syntax--double syntax--julia"
+    [:span class="syntax--punctuation syntax--definition syntax--string syntax--begin syntax--julia" '"']
+    map(render_interp, string.args)...
+    [:span class="syntax--punctuation syntax--definition syntax--string syntax--end syntax--julia" '"']]
+end
+
+render_interp(x::String) = x
+render_interp(x) = @dom[:span class="syntax--variable syntax--interpolation syntax--julia" "\$(" render(x) ')']
+
 const comma = @dom[:span class="syntax--meta syntax--bracket syntax--julia" ',']
 const comma_seperator = @dom[:span comma ' ']
 const begin_block = @dom[:span class="syntax--keyword syntax--control syntax--julia" "begin"]
