@@ -4,7 +4,7 @@
 @require "github.com/JunoLab/CodeTools.jl" => CodeTools
 @require "github.com/jkroso/Destructure.jl" @destruct
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
-@require "github.com/jkroso/Prospects.jl" assoc
+@require "github.com/jkroso/Prospects.jl" assoc interleave
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/write-json.jl"
 @require "../State" UIState cursor need private FieldTypeCursor
@@ -280,8 +280,6 @@ brief(T::DataType) =
       @dom[:span css"display: inline-flex; flex-direction: row"
         [:span "{"] interleave(map(brief, T.parameters), ",")... [:span "}"]]
     end]
-
-interleave(itr, x) = vcat(([a,b] for a=itr, b=(x,))...)[1:end-1]
 
 header(T::DataType) = begin
   if supertype(T) ≠ Any
