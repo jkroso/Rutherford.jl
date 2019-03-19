@@ -6,10 +6,10 @@ import Markdown
 renderMD(v::Vector) = @dom[:div map(renderMD, v)...]
 renderMD(s::AbstractString) = @dom[:p parse(MIME("text/html"), s)]
 renderMD(p::Markdown.Paragraph) = @dom[:p map(renderMDinline, vcat(p.content))...]
-renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, vcat(p.content))...]
+renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, vcat(b.content))...]
 renderMD(l::Markdown.LaTeX) = @dom[:latex class="latex block" block=true Atom.latex2katex(l.formula)]
 renderMD(l::Markdown.Link) = @dom[:a href=l.url l.text]
-renderMD(md::Markdown.HorizontalRule) = @dom[:hr]
+renderMD(::Markdown.HorizontalRule) = @dom[:hr]
 
 renderMD(h::Markdown.Header{l}) where l =
   DOM.Container{Symbol(:h, l)}(DOM.Attrs(), map(renderMDinline, vcat(h.text)))
@@ -76,7 +76,7 @@ renderMDinline(md::Markdown.Bold) = @dom[:b renderMDinline(md.text)]
 renderMDinline(md::Markdown.Italic) = @dom[:em renderMDinline(md.text)]
 renderMDinline(md::Markdown.Image) = @dom[:img src=md.url alt=md.alt]
 renderMDinline(l::Markdown.Link) = @dom[:a href=l.url renderMDinline(l.text)]
-renderMDinline(br::Markdown.LineBreak) = @dom[:br]
+renderMDinline(::Markdown.LineBreak) = @dom[:br]
 renderMDinline(p::Markdown.Paragraph) = renderMD(p)
 
 renderMDinline(f::Markdown.Footnote) =
