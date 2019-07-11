@@ -12,11 +12,11 @@ atom.commands.add(".item-views > atom-text-editor", {
   },
   "julia-client:reset-module": () => {
     connection.boot()
-    const {edpath} = runtime.evaluation.currentContext()
+    const {edpath} = runtime.evaluation._currentContext()
     connection.client.ipc.msg("reset module", edpath)
   },
   "julia-client:focus-result": () => {
-    const {editor} = runtime.evaluation.currentContext()
+    const {editor} = runtime.evaluation._currentContext()
     const cursors = misc.blocks.get(editor)
     if (cursors.length > 1) throw Error("Can't focus multiple results")
     const {range} = cursors[0]
@@ -113,7 +113,7 @@ const results = {}
 var id = 0
 
 const eval_block = () => {
-  const {editor, mod, edpath} = runtime.evaluation.currentContext()
+  const {editor, mod, edpath} = runtime.evaluation._currentContext()
   Promise.all(misc.blocks.get(editor).map(({range, line, text}) => {
     const [[start], [end]] = range
     const r = new runtime.evaluation.ink.Result(editor, [start, end], {type: "inline", scope: "julia"})
