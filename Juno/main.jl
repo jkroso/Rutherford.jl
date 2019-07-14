@@ -307,7 +307,12 @@ render(T::DataType) = begin
           [:span "::"]
           render(FieldTypeCursor(fieldtype(T, name), cursor[]))]
         for name in attrs)...]
-      expandable(@dom[:h4 "Methods"], private(methods, false)) do
+      expandable(@dom[:h4 "Constructors"], private(methods, false)) do
+        name = @dom[:span class="syntax--support syntax--function" string(T.name.name)]
+        @dom[:div css"> * {display: block}"
+          (render_method(m, name=name) for m in methods(T))...]
+      end
+      expandable(@dom[:h4 "Instance Methods"], private(methodswith, false)) do
         @dom[:div css"> * {display: block}"
           (render(m) for m in methodswith(toUnionAll(T), supertypes=true))...]
       end]
@@ -361,11 +366,12 @@ end
 stripparams(t) = replace(t, r"\{([A-Za-z, ]*?)\}"=>"")
 interpose(xs, y) = map(i -> iseven(i) ? xs[i÷2] : y, 2:2length(xs))
 
-render(m::Method) = begin
+render(m::Method) = render_method(m)
+render_method(m::Method; name=name(m)) = begin
   tv, decls, file, line = Base.arg_decl_parts(m)
   params = [@dom[:span x isempty(T) ? "" : "::" [:span class="syntax--support syntax--type" stripparams(T)]]
             for (x, T) in decls[2:end]]
-  sig = @dom[:span name(m) "(" interpose(params, ", ")... ")"]
+  sig = @dom[:span name "(" interpose(params, ", ")... ")"]
   link = file == :null ? "not found" : stacklink(string(file), line)
   @dom[:span sig " at " link]
 end
