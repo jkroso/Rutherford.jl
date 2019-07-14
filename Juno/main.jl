@@ -300,11 +300,13 @@ render(T::DataType) = begin
   isempty(attrs) && return header(T)
   expandable(header(T)) do
     @dom[:div
-      (@dom[:div css"display: flex"
-        [:span String(name)]
-        [:span "::"]
-        render(FieldTypeCursor(fieldtype(T, name), cursor[]))]
-      for name in attrs)...
+      Atom.CodeTools.hasdoc(T) ? render(Base.doc(T)) : nothing
+      [:div css"padding: 3px 5px; background: white; border-radius: 3px; margin: 3px 0"
+        (@dom[:div css"display: flex"
+          [:span String(name)]
+          [:span "::"]
+          render(FieldTypeCursor(fieldtype(T, name), cursor[]))]
+        for name in attrs)...]
       expandable(@dom[:h4 "Methods"], private(methods, false)) do
         @dom[:div css"> * {display: block}"
           (render(m) for m in methodswith(toUnionAll(T), supertypes=true))...]
@@ -383,14 +385,13 @@ end
 render(f::Function) =
   expandable(name(f), private(f, false)) do
     @dom[:div css"""
-              padding: 8px 0
               max-width: 800px
               white-space: normal
               h1 {font-size: 1.4em}
               pre {padding: 0}
               > div:last-child > div:last-child {overflow: visible}
               """
-      Atom.CodeTools.hasdoc(f) ? render(Base.doc(f)) : @dom[:p "No documentation available"]
+      Atom.CodeTools.hasdoc(f) ? @dom[:div css"padding: 8px 0" render(Base.doc(f))] : nothing
       render(methods(f))]
   end
 
@@ -466,7 +467,7 @@ expandable(fn::Function, head, open=private(expandable, false)) = begin
       chevron(open[])
       head]
     if open[]
-      @dom[:div css"padding: 3px 0 3px 20px; overflow: auto; max-height: 500px" fn()]
+      @dom[:div css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px" fn()]
     end]
 end
 
