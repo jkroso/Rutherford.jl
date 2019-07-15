@@ -1,6 +1,6 @@
 @require "github.com/MikeInnes/MacroTools.jl" => MacroTools @match
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
-@require "github.com/jkroso/Prospects.jl" assoc need
+@require "github.com/jkroso/Prospects.jl" assoc need dissoc
 @require "./State.jl" UIState cursor Cursor currentUI TopLevelCursor
 
 """
@@ -19,6 +19,15 @@ struct Assoc <: Change
   value::Any
 end
 
+struct Swap <: Change
+  value::Any
+end
+
+struct Delete <: Change end
+struct Dissoc <: Change
+  key::Any
+end
+
 """
 apply a change to `x` if `a` isn't a change then it's assumed to be a literal
 value which replaces `b`
@@ -35,17 +44,17 @@ apply(a::Assoc, data) = begin
   assoc(data, a.key, value)
 end
 
+apply(s::Swap, data) = s.value
+apply(a::Delete, data) = nothing
+apply(a::Dissoc, data) = dissoc(data, a.key)
+
 """
 Convert a change designed to be applied to a `Cursor` to one that can be applied
 to a `TopLevelCursor`
 """
 globalize(c::Change, cursor::TopLevelCursor) = c
-globalize(c::Change, cursor::Cursor) = begin
-  key = getfield(cursor, :key)
-  parent = getfield(cursor, :parent)
-  globalize(Assoc(key, c), parent)
-end
-
+globalize(c::Change, cursor::Cursor) = globalize(Assoc(getfield(cursor, :key), c), getfield(cursor, :parent))
+globalize(d::Delete, c::Cursor) = globalize(Dissoc(getfield(c, :key)), getfield(c, :parent))
 
 "`globalize` a `change` and apply it to the state of the `currentUI`"
 transact(change::Change) = begin

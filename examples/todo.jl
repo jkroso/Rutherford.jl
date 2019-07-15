@@ -3,7 +3,8 @@
 # This example is just a minimal Todo list. It's intended to show how
 # a typical app would operate over an immutable data structure
 #
-@require "github.com/jkroso/Rutherford.jl" UI render @ui @css_str cursor @handler @dom
+@require "github.com/jkroso/Rutherford.jl" UI render @ui @css_str cursor
+@require "github.com/jkroso/Rutherford.jl/transactions" Delete Assoc Merge transact
 @require "github.com/jkroso/Rutherford.jl/stdlib" TextField data
 @require "github.com/jkroso/Prospects.jl" unshift assoc
 
@@ -18,7 +19,7 @@ const state = (input=assoc(data(TextField), :focused, true),
                       Item("Write todo example", true)])
 
 render(item::Item) =
- @dom[:div class.done=item.done
+ @ui[:div class.done=item.done
           css"""
           display: flex
           align-items: center
@@ -45,9 +46,9 @@ render(item::Item) =
           """
    [:input :type=:checkbox
            checked=item.done
-           onclick=@handler assoc(item, :done, !item.done)]
+           onclick=()->Assoc(:done, !item.done) |> transact]
    [:span item.title]
-   [:button "×" onclick=@handler delete!]]
+   [:button "×" onclick=e->transact(Delete())]]
 
 UI(state) do state
   @ui[:div css"""
@@ -66,10 +67,10 @@ UI(state) do state
       border: 1px solid rgb(180,180,180)
       """
       placeholder="What needs doing?"
-      onsubmit=@handler txt -> begin
+      onsubmit=txt -> begin
         isempty(txt) && return nothing
-        assoc(state, :input, assoc(data(TextField), :focused, true),
-                     :items, unshift(state.items, Item(txt, false)))
+        Merge((input=assoc(data(TextField), :focused, true),
+               items=unshift(state.items, Item(txt, false)))) |> transact
       end]
     [:ul css"margin: 20px 0; border: 1px solid rgb(180,180,180); padding: 0; width: 100%"
       (render(x) for (i, x) in cursor[][:items])...]]
