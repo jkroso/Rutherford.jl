@@ -1,6 +1,7 @@
 @require "github.com/jkroso/DOM.jl" => DOM Events Node Container HTML @dom @css_str
 @require "github.com/MikeInnes/MacroTools.jl" => MacroTools @capture postwalk
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
+@require "github.com/jkroso/Prospects.jl" Field
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/write-json.jl"
@@ -117,25 +118,29 @@ render(c::UIState) = @dynamic! let cursor = c
   render(need(c))
 end
 
-Base.display(ui::UI) = begin
+queue_display(::Nothing) = nothing
+queue_display(ui::UI) = begin
   istaskdone(ui.display_task) || return
-  ui.display_task = @async begin
-    state = need(ui.data) isa Atom.EvalError ? :error : :ok
-    view = Atom.@errs render(ui)
-    try
-      if view isa Atom.EvalError
-        state = :error
-        ui.view = render(view)
-      else
-        ui.view = view
-      end
-      for device in ui.devices
-        device.state = state
-        display(device, ui.view)
-      end
-    catch e
-      @show e
+  ui.display_task = @async display(ui)
+  nothing
+end
+
+Base.display(ui::UI) = begin
+  state = need(ui.data) isa Atom.EvalError ? :error : :ok
+  view = Atom.@errs render(ui)
+  try
+    if view isa Atom.EvalError
+      state = :error
+      ui.view = render(view)
+    else
+      ui.view = view
     end
+    for device in ui.devices
+      device.state = state
+      display(device, ui.view)
+    end
+  catch e
+    @show e
   end
 end
 
@@ -232,6 +237,58 @@ handler(fn) = begin
   else
     (event, path) -> @dynamic! let cursor = state; fn() end
   end
+end
+
+"""
+A UI chunk that has some private state associated with it. Component subtypes should
+be created with the `@component` macro. e.g `@component SubtypeName`. Because they need
+to have certain fields in a certain order
+
+All Components should implement `render(<:Component)` and `default_state(<:Component)`
+"""
+abstract type Component <: DOM.Node end
+
+"Generate the initial state for a Component"
+default_state(::Type{<:Component}) = nothing
+
+"Makes it easy to define a new type of Component"
+macro component(name)
+  name = esc(name)
+  Base.@__doc__(quote
+    mutable struct $name <: Component
+      attrs::AbstractDict{Symbol,Any}
+      children::Vector{DOM.Node}
+      state::Any
+      UI::Union{Nothing,UI}
+      view::DOM.Node
+      $name(attrs, children) = new(attrs, children, default_state($name), currentUI[])
+    end
+  end)
+end
+
+DOM.diff(a::T, b::T) where T<:Component = begin
+  setfield!(b, :state, a.state)
+  DOM.diff(a.view, b.view)
+end
+
+DOM.emit(c::Component, e) = DOM.emit(c.view, e)
+Base.convert(::Type{<:DOM.Primitive}, c::Component) = c.view
+Base.show(io::IO, m::MIME, c::Component) = show(io, m, c.view)
+
+Base.getproperty(c::Component, f::Symbol) = getproperty(c, Field{f}())
+Base.getproperty(c::Component, ::Field{name}) where name = getfield(c, name)
+Base.getproperty(c::Component, ::Field{:view}) = begin
+  isdefined(c, :view) && return getfield(c, :view)
+  @dynamic! let currentUI = c.UI
+    setfield!(c, :view, render(c))
+  end
+end
+
+Base.setproperty!(c::Component, f::Symbol, x) = setproperty!(c, Field{f}(), x)
+Base.setproperty!(c::Component, ::Field{name}, x) where name = setfield!(c, name, x)
+Base.setproperty!(c::Component, ::Field{:state}, x) = begin
+  setfield!(c, :state, x)
+  queue_display(c.UI)
 end
 
 export @ui, @css_str, cursor, render

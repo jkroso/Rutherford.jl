@@ -1,4 +1,4 @@
-@require ".." couple decouple UI msg render
+@require ".." couple decouple UI msg render default_state @component
 @require "github.com/MikeInnes/MacroTools.jl" rmlines @capture
 @require "github.com/jkroso/DOM.jl" => DOM Events @dom @css_str
 @require "github.com/JunoLab/CodeTools.jl" => CodeTools
@@ -7,7 +7,7 @@
 @require "github.com/jkroso/Prospects.jl" assoc interleave
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/write-json.jl"
-@require "../State" UIState cursor need private FieldTypeCursor
+@require "../State" UIState cursor need FieldTypeCursor
 @require "./markdown.jl" renderMD
 using InteractiveUtils
 import Markdown
@@ -210,7 +210,7 @@ render(m::Module) = begin
   expandable(header) do
     @dom[:div css"max-height: 500px; max-width: 1000px"
       if readme != nothing
-        expandable(@dom[:h3 "Readme.md"], private(readme, false)) do
+        expandable(@dom[:h3 "Readme.md"]) do
           @dom[:div css"margin-bottom: 20px" renderMDFile(readme)]
         end
       end
@@ -307,12 +307,12 @@ render(T::DataType) = begin
           [:span "::"]
           render(FieldTypeCursor(fieldtype(T, name), cursor[]))]
         for name in attrs)...]
-      expandable(@dom[:h4 "Constructors"], private(methods, false)) do
+      expandable(@dom[:h4 "Constructors"]) do
         name = @dom[:span class="syntax--support syntax--function" string(T.name.name)]
         @dom[:div css"> * {display: block}"
           (render_method(m, name=name) for m in methods(T))...]
       end
-      expandable(@dom[:h4 "Instance Methods"], private(methodswith, false)) do
+      expandable(@dom[:h4 "Instance Methods"]) do
         @dom[:div css"> * {display: block}"
           (render(m) for m in methodswith(toUnionAll(T), supertypes=true))...]
       end]
@@ -389,7 +389,7 @@ render(m::Base.MethodList) = begin
 end
 
 render(f::Function) =
-  expandable(name(f), private(f, false)) do
+  expandable(name(f)) do
     @dom[:div css"""
               max-width: 800px
               white-space: normal
@@ -466,14 +466,20 @@ body(dict::AbstractDict) =
 body(v::Union{Tuple,AbstractVector}) =
   @dom[:div css"> * {display: block}" (render(v) for (k,v) in cursor[])...]
 
-expandable(fn::Function, head, open=private(expandable, false)) = begin
-  onmousedown(e) = open[] = !open[]
+expandable(fn::Function, head) = @dom[Expandable thunk=fn head]
+
+"Shows a brief view that can be toggled into a more detailed view"
+@component Expandable
+default_state(::Type{Expandable}) = false
+render(e::Expandable) = begin
+  isopen = e.state
   @dom[:div
-    [:div{onmousedown} css"display: flex; flex-direction: row; align-items: center"
-      chevron(open[])
-      head]
-    if open[]
-      @dom[:div css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px" fn()]
+    [:div css"display: flex; flex-direction: row; align-items: center"
+          onmousedown=(_)->e.state = !isopen
+      chevron(isopen)
+      e.children...]
+    if isopen
+      @dom[:div css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px" e.attrs[:thunk]()]
     end]
 end
 
