@@ -1,6 +1,6 @@
 @require "github.com/MikeInnes/MacroTools.jl" => MacroTools @match
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
-@require "github.com/jkroso/Prospects.jl" assoc need dissoc
+@require "github.com/jkroso/Prospects.jl" assoc need dissoc unshift
 @require "./State.jl" UIState cursor Cursor currentUI TopLevelCursor
 
 """
@@ -12,6 +12,10 @@ abstract type Change end
 
 struct Merge <: Change
   data::Any
+end
+
+struct Unshift <: Change
+  item::Any
 end
 
 struct Assoc <: Change
@@ -44,6 +48,7 @@ apply(a::Assoc, data) = begin
   assoc(data, a.key, value)
 end
 
+apply(u::Unshift, data) = unshift(data, u.item)
 apply(s::Swap, data) = s.value
 apply(a::Delete, data) = nothing
 apply(a::Dissoc, data) = dissoc(data, a.key)

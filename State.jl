@@ -24,7 +24,8 @@ Base.put!(s::TopLevelCursor, value) = begin
   new_cursor = TopLevelCursor(value, UIs)
   for ui in UIs
     ui.data = new_cursor
-    display(ui)
+    istaskdone(ui.display_task) || continue
+    ui.display_task = @async display(ui)
   end
 end
 
