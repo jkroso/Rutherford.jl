@@ -423,14 +423,14 @@ render(t::Tuple) = begin
 end
 
 literal(t::Tuple) = begin
-  content = interleave((render(v) for (k,v) in cursor[]), @dom[:span css"padding: 0 6px 0 0" ','])
+  content = interleave((render(v) for (k,v) in cursor[]), @dom[:span css"padding: 0 6px 0 0" ',']) |> collect
   length(content) == 1 && push!(content, @dom[:span ','])
   @dom[:span css"display: flex; flex-direction: row" [:span '('] content... [:span ')']]
 end
 
 literal(t::NamedTuple) = begin
   items = (@dom[:span css"display: flex; flex-direction: row" need(k) '=' render(v)] for (k,v) in cursor[])
-  content = interleave(items, @dom[:span css"padding: 0 6px 0 0" ','])
+  content = interleave(items, @dom[:span css"padding: 0 6px 0 0" ',']) |> collect
   length(content) == 1 && push!(content, @dom[:span ','])
   @dom[:span css"display: flex; flex-direction: row" [:span '('] content... [:span ')']]
 end
@@ -735,8 +735,7 @@ end
 
 row(e, islast) = begin
   items = interleave(map(expr, e.args), ' ')
-  push!(items, islast ? bracket(']') : @dom ';')
-  @dom[:div items...]
+  @dom[:div items... islast ? bracket(']') : @dom ';']
 end
 
 expr(r, ::Val{:ref}) = begin
