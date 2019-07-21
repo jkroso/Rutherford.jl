@@ -1,7 +1,5 @@
-@require "github.com/MikeInnes/MacroTools.jl" => MacroTools @match
-@require "github.com/jkroso/DynamicVar.jl" @dynamic!
 @require "github.com/jkroso/Prospects.jl" assoc need dissoc unshift @struct
-@require "./Entities.jl" cursor currentUI AbstractEntity AbstractCursor Entity
+@require "./Entities.jl" AbstractEntity AbstractCursor Entity
 
 """
 A `Change` represents a transformation that could be applied to a data structure.
@@ -47,9 +45,4 @@ globalize(c::Change, cursor::AbstractCursor) = globalize(Assoc(cursor.key, c), c
 globalize(d::Delete, c::AbstractCursor) = globalize(Dissoc(c.key), c.parent)
 
 "`globalize` a `change` and apply it to the state of the `currentUI`"
-transact(change::Change) = begin
-  ui = currentUI[]
-  change = globalize(change, cursor[])
-  ui.data.value = apply(change, need(ui.data))
-  nothing
-end
+function transact end

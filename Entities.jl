@@ -15,9 +15,6 @@ abstract type AbstractCursor <: AbstractEntity end
 @struct NTIterationCursor(value, index, parent::AbstractEntity) <: AbstractCursor
 @struct IndexableIterationCursor(value, key, parent::AbstractEntity) <: AbstractCursor
 
-const currentUI = Ref{Any}(nothing)
-const cursor = Ref{AbstractEntity}(Entity(nothing))
-
 need(e::AbstractEntity) = e.value
 onchange(fn, e::Entity) = e.onchange = push(e.onchange, fn)
 Base.getproperty(e::Entity, f::Symbol) = getproperty(e, Field{f}())

@@ -5,13 +5,16 @@
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/write-json.jl"
-@require "./Entities" Entity AbstractEntity cursor currentUI need onchange
+@require "./Entities" Entity AbstractEntity need onchange
+@require "./transactions" transact globalize apply Change
 
 import Sockets: listenany, accept, TCPSocket
 
 const app_path = joinpath(@dirname(), "app")
 const json = MIME("application/json")
 const msglock = ReentrantLock()
+const currentUI = Ref{Any}(nothing)
+const cursor = Ref{AbstractEntity}(Entity(nothing))
 
 msg(x; kwargs...) = msg(x, kwargs)
 msg(a::App, data) = msg(a.proc.in, data)
@@ -74,6 +77,13 @@ UI(fn, data) = begin
   ui = UI(DOM.null_node, fn, [], done_task, Entity(data))
   onchange(()->queue_display(ui), ui.data)
   ui
+end
+
+transact(change::Change) = begin
+  ui = currentUI[]
+  change = globalize(change, cursor[])
+  ui.data.value = apply(change, need(ui.data))
+  nothing
 end
 
 DOM.emit(ui::UI, e::Events.Event) = begin
