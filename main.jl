@@ -260,8 +260,9 @@ macro component(name)
       children::Vector{DOM.Node}
       state::Any
       UI::Union{Nothing,UI}
+      cursor::Any
       view::DOM.Node
-      $name(attrs, children) = new(attrs, children, default_state($name), currentUI[])
+      $name(attrs, children) = new(attrs, children, default_state($name), currentUI[], cursor[])
     end
   end)
 end
@@ -276,16 +277,14 @@ Base.convert(::Type{<:DOM.Primitive}, c::Component) = c.view
 Base.show(io::IO, m::MIME, c::Component) = show(io, m, c.view)
 
 Base.getproperty(c::Component, f::Symbol) = getproperty(c, Field{f}())
-Base.getproperty(c::Component, ::Field{name}) where name = getfield(c, name)
 Base.getproperty(c::Component, ::Field{:view}) = begin
   isdefined(c, :view) && return getfield(c, :view)
-  @dynamic! let currentUI = c.UI
+  @dynamic! let currentUI = c.UI, cursor = c.cursor
     setfield!(c, :view, render(c))
   end
 end
 
 Base.setproperty!(c::Component, f::Symbol, x) = setproperty!(c, Field{f}(), x)
-Base.setproperty!(c::Component, ::Field{name}, x) where name = setfield!(c, name, x)
 Base.setproperty!(c::Component, ::Field{:state}, x) = begin
   setfield!(c, :state, x)
   queue_display(c.UI)
