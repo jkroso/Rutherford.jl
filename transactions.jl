@@ -1,7 +1,7 @@
 @require "github.com/MikeInnes/MacroTools.jl" => MacroTools @match
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
-@require "github.com/jkroso/Prospects.jl" assoc need dissoc unshift
-@require "./State.jl" UIState cursor Cursor currentUI TopLevelCursor
+@require "github.com/jkroso/Prospects.jl" assoc need dissoc unshift @struct
+@require "./Entities.jl" cursor currentUI AbstractEntity AbstractCursor Entity
 
 """
 A `Change` represents a transformation that could be applied to a data structure.
@@ -10,27 +10,12 @@ I'm using a special type since it is simpler to implement methods on.
 """
 abstract type Change end
 
-struct Merge <: Change
-  data::Any
-end
-
-struct Unshift <: Change
-  item::Any
-end
-
-struct Assoc <: Change
-  key::Any
-  value::Any
-end
-
-struct Swap <: Change
-  value::Any
-end
-
-struct Delete <: Change end
-struct Dissoc <: Change
-  key::Any
-end
+@struct Merge(data) <: Change
+@struct Unshift(item) <: Change
+@struct Assoc(key, value) <: Change
+@struct Swap(value) <: Change
+@struct Delete() <: Change
+@struct Dissoc(key) <: Change
 
 """
 apply a change to `x` if `a` isn't a change then it's assumed to be a literal
@@ -55,16 +40,16 @@ apply(a::Dissoc, data) = dissoc(data, a.key)
 
 """
 Convert a change designed to be applied to a `Cursor` to one that can be applied
-to a `TopLevelCursor`
+to a `Entity`
 """
-globalize(c::Change, cursor::TopLevelCursor) = c
-globalize(c::Change, cursor::Cursor) = globalize(Assoc(getfield(cursor, :key), c), getfield(cursor, :parent))
-globalize(d::Delete, c::Cursor) = globalize(Dissoc(getfield(c, :key)), getfield(c, :parent))
+globalize(c::Change, cursor::Entity) = c
+globalize(c::Change, cursor::AbstractCursor) = globalize(Assoc(cursor.key, c), cursor.parent)
+globalize(d::Delete, c::AbstractCursor) = globalize(Dissoc(c.key), c.parent)
 
 "`globalize` a `change` and apply it to the state of the `currentUI`"
 transact(change::Change) = begin
   ui = currentUI[]
   change = globalize(change, cursor[])
-  put!(ui.data, apply(change, need(ui.data)))
+  ui.data.value = apply(change, need(ui.data))
   nothing
 end

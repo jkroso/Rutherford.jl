@@ -1,4 +1,4 @@
-@require ".." couple decouple UI msg render default_state @component
+@require ".." couple decouple UI msg render cursor need default_state @component
 @require "github.com/MikeInnes/MacroTools.jl" rmlines @capture
 @require "github.com/jkroso/DOM.jl" => DOM Events @dom @css_str
 @require "github.com/JunoLab/CodeTools.jl" => CodeTools
@@ -7,8 +7,8 @@
 @require "github.com/jkroso/Prospects.jl" assoc interleave
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/write-json.jl"
-@require "../State" UIState cursor need FieldTypeCursor
-@require "./markdown.jl" renderMD
+@require "../Entities" FieldTypeCursor
+@require "./markdown" renderMD
 using InteractiveUtils
 import Markdown
 import Dates
@@ -423,7 +423,7 @@ render(t::Tuple) = begin
 end
 
 literal(t::Tuple) = begin
-  content = interleave((render(v) for (k,v) in cursor[]), @dom[:span css"padding: 0 6px 0 0" ',']) |> collect
+  content = interleave(map(render, cursor[]), @dom[:span css"padding: 0 6px 0 0" ',']) |> collect
   length(content) == 1 && push!(content, @dom[:span ','])
   @dom[:span css"display: flex; flex-direction: row" [:span '('] content... [:span ')']]
 end
@@ -438,7 +438,7 @@ end
 render(s::Set) = begin
   isempty(s) && return brief(s)
   expandable(brief(s)) do
-    @dom[:div css"> * {display: block}" (render(v) for (i,v) in cursor[])...]
+    @dom[:div css"> * {display: block}" (render(v) for v in cursor[])...]
   end
 end
 
@@ -464,7 +464,7 @@ body(dict::AbstractDict) =
     for (key, value) in cursor[])...]
 
 body(v::Union{Tuple,AbstractVector}) =
-  @dom[:div css"> * {display: block}" (render(v) for (k,v) in cursor[])...]
+  @dom[:div css"> * {display: block}" map(render, cursor[])...]
 
 expandable(fn::Function, head) = @dom[Expandable thunk=fn head]
 

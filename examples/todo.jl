@@ -44,9 +44,9 @@ render(item::Item) =
           """
    [:input :type=:checkbox
            checked=item.done
-           onclick=()->Assoc(:done, !item.done) |> transact]
+           onclick=()->transact(Assoc(:done, !item.done))]
    [:span item.title]
-   [:button "×" onclick=e->transact(Delete())]]
+   [:button "×" onclick=()->transact(Delete())]]
 
 UI(state) do state
   input = @ui[TextField
@@ -72,5 +72,5 @@ UI(state) do state
            """
     input
     [:ul css"margin: 20px 0; border: 1px solid rgb(180,180,180); padding: 0; width: 100%"
-      (render(x) for (i, x) in cursor[])...]]
+      map(render, cursor[])...]]
 end

@@ -5,7 +5,7 @@
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/write-json.jl"
-@require "./State" TopLevelCursor UIState cursor currentUI need
+@require "./Entities" Entity AbstractEntity cursor currentUI need onchange
 
 import Sockets: listenany, accept, TCPSocket
 
@@ -67,13 +67,12 @@ mutable struct UI
   render::Any # any callable object
   devices::Vector
   display_task::Task
-  data::TopLevelCursor
-  private::Dict{Vector{Any},Dict{Any,Any}}
+  data::Entity
 end
 
 UI(fn, data) = begin
-  ui = UI(DOM.null_node, fn, [], done_task, TopLevelCursor(data), Dict())
-  push!(getfield(ui.data, :UIs), ui)
+  ui = UI(DOM.null_node, fn, [], done_task, Entity(data))
+  onchange(()->queue_display(ui), ui.data)
   ui
 end
 
@@ -114,7 +113,7 @@ end
 Defining methods that render cursors directly is too verbose. So this method places the cursor on
 the dynamic variable `cursor` and calls `render` with the unwrapped value
 """
-render(c::UIState) = @dynamic! let cursor = c
+render(c::AbstractEntity) = @dynamic! let cursor = c
   render(need(c))
 end
 
@@ -260,7 +259,7 @@ macro component(name)
       children::Vector{DOM.Node}
       state::Any
       UI::Union{Nothing,UI}
-      cursor::Any
+      cursor::AbstractEntity
       view::DOM.Node
       $name(attrs, children) = new(attrs, children, default_state($name), currentUI[], cursor[])
     end
