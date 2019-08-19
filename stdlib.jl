@@ -3,21 +3,24 @@
 @require "." @ui default_state @component render
 
 @component TextField
-default_state(::Type{TextField}) = (editpoint=0, isfocused=false, value="")
+default_state(::Type{TextField}) = (editpoint=0, isfocused=false)
 render(t::TextField) = begin
-  editpoint, isfocused, value = t.state
+  value = t.cursor.value
+  editpoint, isfocused = t.state
+  editpoint = min(length(value), editpoint)
   onkeydown(e, path) = begin
     if e.key == "Enter"
       emit(path, :onsubmit, value)
     elseif e.key == "Backspace"
       str = string(value[1:editpoint-1], value[editpoint+1:end])
       str == value && return
-      t.state = (editpoint=max(editpoint - 1, 0), isfocused=isfocused, value=str)
+      t.state = assoc(t.state, :editpoint, max(editpoint - 1, 0))
+      t.cursor.value = str
       emit(path, :onchange, str)
     elseif e.key == "Delete"
       str = string(value[1:editpoint], value[editpoint+2:end])
       str == value && return
-      t.state = assoc(t.state, :value, str)
+      t.cursor.value = str
       emit(path, :onchange, str)
     elseif e.key == "ArrowLeft"
       t.state = assoc(t.state, :editpoint, max(editpoint - 1, 0))
@@ -29,7 +32,8 @@ render(t::TextField) = begin
       t.state = assoc(t.state, :editpoint, length(value))
     elseif length(e.key) == 1
       str = string(value[1:editpoint], e.key, value[editpoint+1:end])
-      t.state = (editpoint=editpoint + 1, isfocused=isfocused, value=str)
+      t.state = assoc(t.state, :editpoint, editpoint + 1)
+      t.cursor.value = str
       emit(path, :onchange, str)
     end
   end

@@ -8,15 +8,7 @@
 @require "github.com/jkroso/Rutherford.jl" async UI @dom @css_str
 @require "github.com/jkroso/Prospects.jl" assoc
 
-UI(nothing) do state
-  input = @dom[TextField css"""
-                         width: 100%
-                         padding: 10px
-                         border-radius: 3px
-                         border: 1px solid grey
-                         font-size: 16px
-                         """
-                         isfocused=true]
+UI("") do value
   @dom[:div css"""
             width: 500px
             display: flex
@@ -24,7 +16,14 @@ UI(nothing) do state
             flex-direction: column
             padding: 10px 0
             """
-    input
+    [TextField css"""
+               width: 100%
+               padding: 10px
+               border-radius: 3px
+               border: 1px solid grey
+               font-size: 16px
+               """
+               isfocused=true]
     async(@dom[:div "Sleeping..."]) do
       sleep(1) # some time consuming computation
       @dom[:div css"""
@@ -32,6 +31,6 @@ UI(nothing) do state
                 color: rgb(150,150,150)
                 letter-spacing: .09em
                 """
-        input.state.value]
+        value]
     end]
 end
