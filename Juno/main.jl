@@ -25,9 +25,8 @@ const event_parsers = Dict{String,Function}(
   "click" => d-> Events.Click(d["path"], Events.MouseButton(d["button"]), d["position"]...),
   "dblclick" => d-> Events.DoubleClick(d["path"], Events.MouseButton(d["button"]), d["position"]...),
   "mousemove" => d-> Events.MouseMove(d["path"], d["position"]...),
-  "keydown" => d-> Events.KeyDown(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
-  "keyup" => d-> Events.KeyUp(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
-  "keypress" => d-> Events.KeyPress(d["path"], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
+  "keydown" => d-> Events.KeyDown(UInt8[], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
+  "keyup" => d-> Events.KeyUp(UInt8[], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
   "resize" => d-> Events.Resize(d["width"], d["height"]),
   "scroll" => d-> Events.Scroll(d["path"], d["position"]...))
 
@@ -35,7 +34,7 @@ const event_parsers = Dict{String,Function}(
 Atom.handle("event") do id, data
   ui = inline_displays[id].ui
   event = event_parsers[data["type"]](data)
-  DOM.emit(ui, event)
+  DOM.propagate(ui, event)
 end
 
 Atom.handle("reset module") do file

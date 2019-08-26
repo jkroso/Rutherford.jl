@@ -1,7 +1,7 @@
-@require "github.com/jkroso/DOM.jl" => DOM Events Node Container HTML @dom @css_str
+@require "github.com/jkroso/DOM.jl" => DOM Events Node Container HTML @dom @css_str add_attr
 @require "github.com/MikeInnes/MacroTools.jl" => MacroTools @capture postwalk
 @require "github.com/jkroso/DynamicVar.jl" @dynamic!
-@require "github.com/jkroso/Prospects.jl" Field
+@require "github.com/jkroso/Prospects.jl" Field assoc push
 @require "github.com/JunoLab/Atom.jl" => Atom
 @require "github.com/jkroso/Electron.jl" App
 @require "github.com/jkroso/write-json.jl"
@@ -49,7 +49,7 @@ Window(a::App; kwargs...) = begin
 
   # send events to the UI
   loop = @async for line in eachline(sock)
-    DOM.emit(w, Events.parse_event(line))
+    DOM.propagate(w, Events.parse_event(line))
   end
 
   w = Window(sock, initial_view, nothing, loop, :ok)
@@ -71,10 +71,11 @@ mutable struct UI
   devices::Vector
   display_task::Task
   data::Entity
+  focused_node::Union{Nothing,Node}
 end
 
 UI(fn, data) = begin
-  ui = UI(DOM.null_node, fn, [], done_task, Entity(data))
+  ui = UI(DOM.null_node, fn, [], done_task, Entity(data), nothing)
   onchange(()->queue_display(ui), ui.data)
   ui
 end
@@ -86,13 +87,22 @@ transact(change::Change) = begin
   nothing
 end
 
-DOM.emit(ui::UI, e::Events.Event) = begin
-  @dynamic! let currentUI = ui, cursor = ui.data
-    @static if isinteractive()
-      Base.invokelatest(DOM.emit, ui.view, e)
-    else
-      DOM.emit(ui.view, e)
-    end
+DOM.propagate(ui::UI, e::Events.Event) = propagate_event(ui, ui.view, e)
+DOM.propagate(ui::UI, e::Events.Key) = propagate_event(ui, ancestry(ui.focused_node, ui.view), e)
+
+propagate_event(ui, target, e) = @dynamic! let currentUI = ui, cursor = ui.data
+  @static if isinteractive()
+    Base.invokelatest(DOM.propagate, target, e)
+  else
+    DOM.propagate(target, e)
+  end
+end
+
+ancestry(node, container, path=Node[container]) = begin
+  node === container && return path
+  for child in container.children
+    val = ancestry(node, child, push(path, child))
+    val !== nothing && return val
   end
 end
 
@@ -136,6 +146,7 @@ end
 
 Base.display(ui::UI) = begin
   state = need(ui.data) isa Atom.EvalError ? :error : :ok
+  ui.focused_node = nothing
   view = Atom.@errs render(ui)
   try
     if view isa Atom.EvalError
@@ -153,6 +164,15 @@ Base.display(ui::UI) = begin
   end
 end
 
+"Set the target of keyboard events"
+focus(node, isfocused=true) = begin
+  if isfocused
+    currentUI[].focused_node = add_attr(node, :isfocused, true)
+  else
+    node
+  end
+end
+
 Base.display(w::Window, ui::UI) = begin
   ui.view = render(ui)
   display(w, ui.view)
@@ -167,9 +187,9 @@ Base.display(w::Window, view::Node) = begin
   nothing
 end
 
-DOM.emit(w::Window, e::Events.Event) =
+DOM.propagate(w::Window, e::Events.Event) =
   @dynamic! let currentUI = w.UI, cursor = w.UI.data
-    DOM.emit(w.view, e)
+    DOM.propagate(w.view, e)
   end
 
 async(fn::Function, pending::Node; onerror=handle_async_error) = begin
@@ -239,12 +259,10 @@ end
 handler(fn) = begin
   state = cursor[]
   maxargs = max(map(m->m.nargs-1, methods(fn))...)
-  if maxargs == 2
-    (event, path) -> @dynamic! let cursor = state; fn(event, path) end
-  elseif maxargs == 1
-    (event, path) -> @dynamic! let cursor = state; fn(event) end
+  if maxargs == 1
+    (event) -> @dynamic! let cursor = state; fn(event) end
   else
-    (event, path) -> @dynamic! let cursor = state; fn() end
+    (_) -> @dynamic! let cursor = state; fn() end
   end
 end
 
@@ -276,12 +294,14 @@ macro component(name)
   end)
 end
 
+add_attr(c::Component, key::Symbol, value::Any) = (c.attrs = add_attr(c.attrs, key, value); c)
+
 DOM.diff(a::T, b::T) where T<:Component = begin
   setfield!(b, :state, a.state)
   DOM.diff(a.view, b.view)
 end
 
-DOM.emit(c::Component, e) = DOM.emit(c.view, e)
+DOM.propagate(c::Component, e) = DOM.propagate(c.view, e)
 Base.convert(::Type{<:DOM.Primitive}, c::Component) = c.view
 Base.show(io::IO, m::MIME, c::Component) = show(io, m, c.view)
 

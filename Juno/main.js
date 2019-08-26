@@ -52,13 +52,6 @@ const modifiers = (e) => {
   return mods
 }
 
-const keyboard_event = (e, top_node) => ({
-  type: e.type,
-  path: dom_path(e.target, top_node),
-  key: e.key,
-  modifiers: modifiers(e)
-})
-
 const mouse_button_event = (e, top_node) => ({
   type: e.type,
   path: dom_path(e.target, top_node),
@@ -77,9 +70,6 @@ const dom_path = (dom, top_node) => top_node.contains(dom) ? DOM.dom_path(dom, t
 DOM.attrSetters.isfocused = (el, value) => value && setTimeout(() => el.focus(), 50)
 
 const event_converters = {
-  keydown: keyboard_event,
-  keyup: keyboard_event,
-  keypress: keyboard_event,
   click: mouse_button_event,
   dblclick: mouse_button_event,
   mousedown: mouse_button_event,
@@ -167,20 +157,37 @@ connection.client.ipc.handle("render", ({state, dom, id}) => {
     }
   }, true)
 
-  r.focused_node = null
-  r.prev_focus = null
-  top_node.addEventListener("focusout", (e) => {
-    top_node.style.boxShadow = ""
-    r.prev_focus = null
-    r.focused_node = e.target
+  r.focus_trap = document.createElement('input')
+  r.focus_trap.setAttribute("type", "text")
+  r.focus_trap.style.position = "absolute"
+  r.focus_trap.style.opacity = "0"
+
+  const sendKeyEvent = (e) => {
+    connection.client.ipc.msg("event", id, {type: e.type, key: e.key, modifiers: modifiers(e)})
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  r.focus_trap.addEventListener("keydown", sendKeyEvent, true)
+  r.focus_trap.addEventListener("keyup", sendKeyEvent, true)
+  r.focus_trap.addEventListener("keypress", (e) => {
+    e.preventDefault()
+    e.stopPropagation()
   }, true)
-  top_node.addEventListener("focusin", (e) => {
+
+  r.prev_focus = null
+  r.isfocused = false
+  r.focus_trap.addEventListener("focusout", (e) => {
+    top_node.style.boxShadow = ""
+    r.isfocused = false
+  }, true)
+  r.focus_trap.addEventListener("focusin", (e) => {
     top_node.style.boxShadow = "0px 0px 1px #1f96ff"
     r.prev_focus = e.relatedTarget
-    r.focused_node = null
+    r.isfocused = true
   }, true)
   top_node.addEventListener("mousedown", (e) => {
-    if (r.focused_node != null) r.focused_node.focus()
+    r.isfocused || r.focus_trap.focus()
   }, true)
   top_node.addEventListener("keydown", (e) => {
     if (e.key == "Escape") r.prev_focus.focus()
@@ -197,7 +204,8 @@ connection.client.ipc.handle("render", ({state, dom, id}) => {
 
   top_node.classList.toggle("error", state == "error")
   top_node.classList.remove("loading")
-  top_node.replaceChild(DOM.create(dom), top_node.lastChild)
+  top_node.replaceChild(r.focus_trap, top_node.lastChild)
+  top_node.appendChild(DOM.create(dom))
 
   runtime.workspace.update()
 })

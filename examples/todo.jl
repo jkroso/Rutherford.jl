@@ -3,7 +3,7 @@
 # This example is just a minimal Todo list. It's intended to show how
 # a typical app would operate over an immutable data structure
 #
-@require "github.com/jkroso/Rutherford.jl" UI render @ui @css_str cursor
+@require "github.com/jkroso/Rutherford.jl" UI render @ui @css_str cursor focus
 @require "github.com/jkroso/Rutherford.jl/transactions" Delete Merge Swap Assoc Unshift transact
 @require "github.com/jkroso/Rutherford.jl/stdlib" TextField
 
@@ -57,7 +57,7 @@ UI(state) do state
            margin: 10px
            font-family: monospace
            """
-    [TextField → :input
+    focus(@ui[TextField → :input
       css"""
       width: 100%
       font: 2em/1.8em monospace
@@ -66,10 +66,9 @@ UI(state) do state
       border: 1px solid rgb(180,180,180)
       """
       placeholder="What needs doing?"
-      isfocused=true
       onsubmit=txt-> if !isempty(txt)
-       transact(Merge((input=Swap(""), items=Unshift(Item(txt, false)))))
-      end]
+        transact(Merge((input=Swap(""), items=Unshift(Item(txt, false)))))
+      end])
     [:ul css"margin: 20px 0; border: 1px solid rgb(180,180,180); padding: 0; width: 100%"
       map(render, cursor[][:items])...]]
 end
