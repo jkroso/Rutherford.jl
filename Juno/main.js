@@ -161,6 +161,7 @@ connection.client.ipc.handle("render", ({state, dom, id}) => {
   r.focus_trap.setAttribute("type", "text")
   r.focus_trap.style.position = "absolute"
   r.focus_trap.style.opacity = "0"
+  r.focus_trap.style.zIndex = "-999"
 
   const sendKeyEvent = (e) => {
     connection.client.ipc.msg("event", id, {type: e.type, key: e.key, modifiers: modifiers(e)})

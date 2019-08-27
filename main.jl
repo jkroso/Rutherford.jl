@@ -90,6 +90,7 @@ end
 DOM.propagate(ui::UI, e::Events.Event) = propagate_event(ui, ui.view, e)
 DOM.propagate(ui::UI, e::Events.Key) = propagate_event(ui, ancestry(ui.focused_node, ui.view), e)
 
+propagate_event(ui, ::Nothing, e) = nothing
 propagate_event(ui, target, e) = @dynamic! let currentUI = ui, cursor = ui.data
   @static if isinteractive()
     Base.invokelatest(DOM.propagate, target, e)
@@ -98,8 +99,10 @@ propagate_event(ui, target, e) = @dynamic! let currentUI = ui, cursor = ui.data
   end
 end
 
+ancestry(node::Nothing, container, path) = nothing
 ancestry(node, container, path=Node[container]) = begin
   node === container && return path
+  node isa DOM.Text && return nothing
   for child in container.children
     val = ancestry(node, child, push(path, child))
     val !== nothing && return val
@@ -301,7 +304,9 @@ DOM.diff(a::T, b::T) where T<:Component = begin
   DOM.diff(a.view, b.view)
 end
 
-DOM.propagate(c::Component, e) = DOM.propagate(c.view, e)
+DOM.propagate(c::Component, e::Events.Event) = DOM.propagate(c.view, e)
+DOM.emit(c::Component, e::Events.Event) = DOM.emit(c.view, e)
+
 Base.convert(::Type{<:DOM.Primitive}, c::Component) = c.view
 Base.show(io::IO, m::MIME, c::Component) = show(io, m, c.view)
 
