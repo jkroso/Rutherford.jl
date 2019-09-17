@@ -128,6 +128,7 @@ const result_container = () => {
   el.classList.add("ink", "result", "inline", "julia", "ink-hide", "loading")
   setTimeout(() => el.classList.remove("ink-hide"), 20)
   el.appendChild(loading_gear.cloneNode())
+  el.style.minHeight = "1.5em"
   return el
 }
 
