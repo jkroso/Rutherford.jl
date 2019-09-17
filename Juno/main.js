@@ -25,10 +25,7 @@ atom.commands.add(".item-views > atom-text-editor", {
     if (results.length > 1) throw Error("That selection has multiple results associated with it")
     if (results.length == 0) return
     const r = results[0]
-    if (r.focused_node != null)
-      r.focused_node.focus()
-    else if (r.prev_focus != null)
-      r.prev_focus.focus()
+    r.isfocused || r.focus_trap.focus()
   }
 })
 
