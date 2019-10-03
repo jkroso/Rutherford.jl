@@ -287,12 +287,12 @@ macro component(name)
   Base.@__doc__(quote
     mutable struct $name <: Component
       attrs::AbstractDict{Symbol,Any}
-      children::Vector{DOM.Node}
+      content::Vector{DOM.Node}
       state::Any
       UI::Union{Nothing,UI}
       cursor::AbstractEntity
       view::DOM.Node
-      $name(attrs, children) = new(attrs, children, default_state($name), currentUI[], cursor[])
+      $name(attrs, content) = new(attrs, content, default_state($name), currentUI[], cursor[])
     end
   end)
 end
@@ -311,6 +311,7 @@ Base.convert(::Type{<:DOM.Primitive}, c::Component) = c.view
 Base.show(io::IO, m::MIME, c::Component) = show(io, m, c.view)
 
 Base.getproperty(c::Component, f::Symbol) = getproperty(c, Field{f}())
+Base.getproperty(c::Component, ::Field{:children}) = c.view.children
 Base.getproperty(c::Component, ::Field{:view}) = begin
   isdefined(c, :view) && return getfield(c, :view)
   @dynamic! let currentUI = c.UI, cursor = c.cursor

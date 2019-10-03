@@ -476,7 +476,7 @@ render(e::Expandable) = begin
     [:div css"display: flex; flex-direction: row; align-items: center"
           onmousedown=(_)->e.state = !isopen
       chevron(isopen)
-      e.children...]
+      e.content...]
     if isopen
       @dom[:div css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px" e.attrs[:thunk]()]
     end]
