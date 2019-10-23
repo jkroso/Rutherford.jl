@@ -261,14 +261,14 @@ union_params(u) = Any[u]
 
 "By default just render the structure of the object"
 render(data::T) where T = begin
-  attrs = fields(T)
+  attrs = propertynames(data)
   isempty(attrs) && return brief(T)
   expandable(brief(T)) do
     @dom[:div
       (@dom[:div css"display: flex"
         [:span String(field)]
         [:span css"padding: 0 10px" "→"]
-        isdefined(data, field) ? render(cursor[][field]) : fade("#undef")]
+        hasproperty(data, field) ? render(cursor[][field]) : fade("#undef")]
        for field in attrs)...]
   end
 end
