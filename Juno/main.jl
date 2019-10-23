@@ -379,7 +379,7 @@ name(m::Base.MethodList) = @dom[:span class="syntax--support syntax--function" s
 name(m::Method) = @dom[:span class="syntax--support syntax--function" string(m.name)]
 
 render(m::Base.MethodList) = begin
-  ms = Atom.methodarray(m)
+  ms = collect(m)
   isempty(ms) && return @dom [:span name(m) " has no methods"]
   length(ms) == 1 && return render(ms[1])
   expandable(@dom[:span name(m) " has $(length(ms)) methods"]) do
