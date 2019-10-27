@@ -67,3 +67,4 @@ Base.iterate(c::NTIterationCursor, state) =
 cursor_type(::AbstractDict) = DictIterationCursor
 cursor_type(::NamedTuple) = NTIterationCursor
 cursor_type(::Union{AbstractVector,Tuple,Pair}) = IndexableIterationCursor
+cursor_type(::Set) = IndexableIterationCursor # TODO: implement properly
