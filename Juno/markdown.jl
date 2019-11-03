@@ -14,11 +14,14 @@ renderMD(::Markdown.HorizontalRule) = @dom[:hr]
 renderMD(h::Markdown.Header{l}) where l =
   DOM.Container{Symbol(:h, l)}(DOM.Attrs(), map(renderMDinline, vcat(h.text)))
 
-renderMD(c::Markdown.Code) =
-  @dom[:pre
-    [:code class=isempty(c.language) ? "julia" : c.language
-           block=true
-      c.code]]
+renderMD(c::Markdown.Code) = begin
+  language = isempty(c.language) ? "julia" : c.language
+  proc = open(`pygmentize -f html -O "noclasses" -l $(language)`, "r+")
+  write(proc.in, c.code)
+  close(proc.in)
+  html = String(read(proc.out))
+  @dom[:pre [:code block=true parse(MIME("text/html"), html)]]
+end
 
 renderMD(f::Markdown.Footnote) =
   @dom[:div class="footnote" id="footnote-$(f.id)"
@@ -69,6 +72,7 @@ renderMD(md::Markdown.Table) = begin
       end...]]
 end
 
+renderMDinline(x) = renderMD(x)
 renderMDinline(v::Vector) =
   length(v) == 1 ? renderMDinline(v[1]) : @dom[:span map(renderMDinline, v)...]
 renderMDinline(md::Union{Symbol,AbstractString}) = parse(MIME("text/html"), string(md))
