@@ -129,6 +129,7 @@ const result_container = () => {
   setTimeout(() => el.classList.remove("ink-hide"), 20)
   el.appendChild(loading_gear.cloneNode())
   el.style.minHeight = "1.5em"
+  el.style.maxHeight = window.innerHeight/2 + "px"
   return el
 }
 

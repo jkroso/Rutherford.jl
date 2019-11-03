@@ -87,9 +87,7 @@ renderMDinline(f::Markdown.Footnote) =
   @dom[:a href="#footnote-$(f.id)" class="footnote" [:span "[$(f.id)]"]]
 
 renderMDinline(code::Markdown.Code) =
-  @dom[:code class=isempty(code.language) ? "julia" : code.language
-             block=false
-    code.code]
+  @dom[:code class="inline" block=false code.code]
 
 renderMDinline(md::Markdown.LaTeX) =
   @dom[:latex class="latex inline" block=false Atom.latex2katex(md.formula)]

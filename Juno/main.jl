@@ -228,8 +228,13 @@ resolveLinks(c::DOM.Node, dir) = c
 resolveLinks(c::DOM.Container, dir) = assoc(c, :children, map(c->resolveLinks(c, dir), c.children))
 resolveLinks(c::DOM.Container{:img}, dir) = begin
   haskey(c.attrs, :src) || return c
-  src = joinpath(dir, c.attrs[:src])
-  assoc(c, :attrs, assoc(c.attrs, :src, src))
+  src = c.attrs[:src]
+  path = if occursin(r"^https?://", src) || isabspath(src)
+    src
+  else
+    joinpath(dir, src)
+  end
+  assoc(c, :attrs, assoc(c.attrs, :src, path))
 end
 
 "render a chevron symbol that rotates down when open"
@@ -405,7 +410,40 @@ isanon(f) = occursin('#', String(nameof(f)))
 name(f::Function) = @dom[:span class=syntax_class(f) isanon(f) ? "λ" : String(nameof(f))]
 
 # Markdown is loose with its types so we need special functions `renderMD`
-render(m::Markdown.MD) = @dom[:div class="markdown" map(renderMD, CodeTools.flatten(m).content)...]
+render(m::Markdown.MD) =
+  @dom[:div
+    css"""
+    max-width: 1000px
+    margin: 0 auto
+    padding: 1.5em
+    white-space: normal
+    font-family: SourceCodePro-Light
+    code.inline
+      font-family: SourceCodePro-light
+      border-radius: 1em
+      padding: 0px 8px
+      background: #f9f9f9
+    code > .highlight > pre
+      font-family: SourceCodePro-light
+      padding: 1em
+    h1, h2, h3, h4
+      font-weight: 600
+      margin: 0.5em 0
+    h1 {font-size: 2em; margin: 1.5em 0}
+    h2 {font-size: 1.5em}
+    h3 {font-size: 1.25em}
+    ul {margin: 1em 0; padding-left: 1em}
+    ul ul {margin: 0}
+    ul ul > li {list-style: circle}
+    ul li {line-height: 1.5em; list-style: decimal}
+    ul li p {margin-bottom: 0}
+    blockquote
+      padding: 0 1em
+      color: #6a737d
+      border-left: .25em solid #dfe2e5
+    p, blockquote {margin-bottom: 1em}
+    """
+    map(renderMD, CodeTools.flatten(m).content)...]
 
 render(x::Union{AbstractDict,AbstractVector}) = begin
   isempty(x) && return brief(x)
