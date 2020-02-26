@@ -1,11 +1,11 @@
 @use "github.com" [
   "MikeInnes/MacroTools.jl" => MacroTools @match
   "jkroso" [
-    "DOM.jl" => DOM Node Container HTML @dom @css_str add_attr [
+    "DOM.jl" => DOM Node Container Primitive HTML @dom @css_str add_attr [
       "Events.jl" => Events]
     "Prospects.jl" Field assoc push @struct
     "Destructure.jl" @destruct
-    "Promises.jl" @defer Deferred need pending
+    "Promises.jl" @defer Deferred need pending Promise
     "DynamicVar.jl" @dynamic!]
   "JunoLab/Atom.jl" => Atom]
 @use "./transactions" apply Change Assoc Dissoc Delete
@@ -53,10 +53,11 @@ invoke_handler(f::Function, e) = begin
   nothing
 end
 
-async(fn::Function, pending::Node; onerror=handle_async_error) = begin
+Base.convert(::Type{Node}, p::Promise) = async(p, @dom[:span "Loading..."])
+async(p::Promise, pending::Node; onerror=handle_async_error) = begin
   device = current_device()
   n = AsyncNode(true, pending, @async begin
-    view = try need(fn()) catch e onerror(e, ui, n) end
+    view = try need(p) catch e onerror(e, device, n) end
     n.iscurrent && msg(device, command="AsyncNode", id=objectid(n), value=view)
     view
   end)
@@ -70,8 +71,8 @@ mutable struct AsyncNode <: Node
   task::Task
 end
 
-Base.show(io::IO, m::MIME"application/json", a::AsyncNode) = show(io, m, convert(Container, a))
-Base.convert(::Type{Container}, a::AsyncNode) =
+Base.show(io::IO, m::MIME"application/json", a::AsyncNode) = show(io, m, convert(Primitive, a))
+Base.convert(::Type{Primitive}, a::AsyncNode) =
   if istaskdone(a.task)
     Base.task_result(a.task)
   else
@@ -81,7 +82,7 @@ Base.convert(::Type{Container}, a::AsyncNode) =
 DOM.add_attr(a::AsyncNode, key::Symbol, value) = a
 DOM.diff(a::AsyncNode, b::AsyncNode) = begin
   a.iscurrent = false # avoid sending messages for out of date promises
-  DOM.diff(convert(Container, a), convert(Container, b))
+  DOM.diff(convert(Primitive, a), convert(Primitive, b))
 end
 
 """

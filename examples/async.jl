@@ -4,8 +4,9 @@
 # This enables you to generate complex content without locking up the UI
 # from further interactions
 #
-@use "github.com/jkroso/Rutherford.jl" async doodle @dom @css_str [
+@use "github.com/jkroso/Rutherford.jl" doodle @dom @css_str [
   "stdlib/TextField.jl" TextField]
+@use "github.com/jkroso/Promises.jl" @thread
 
 struct AppState
   value
@@ -28,7 +29,7 @@ doodle(s::AppState) = begin
                """
                focus=true
                key=:value]
-    async(@dom[:div "Sleeping..."]) do
+    @thread begin
       sleep(1) # some time consuming computation
       @dom[:div css"""
                 padding: 10px
