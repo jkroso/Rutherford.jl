@@ -8,7 +8,7 @@
   "JunoLab" [
     "CodeTools.jl" => CodeTools
     "Atom.jl" => Atom]]
-@use "." msg @component Context draw doodle path data
+@use "." msg @component Context draw doodle path data stop
 @use "./markdown" renderMD
 using InteractiveUtils
 import Markdown
@@ -249,7 +249,11 @@ stacklink(path, line) = begin
   path == "none" && return fade("$path:$line")
   path == "./missing" && return fade("./missing")
   name, path = expandpath(path)
-  @dom[:a onmousedown=e->(open(path, line); DOM.stop) Atom.appendline(name, line)]
+  onmousedown(e) = begin
+    open(path, line)
+    stop[] = true
+  end
+  @dom[:a{onmousedown} Atom.appendline(name, line)]
 end
 
 open(file, line) = msg("open", (file=file, line=line-1))

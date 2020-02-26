@@ -335,9 +335,10 @@ component(ctx::Context) = ctx.node
 doodle(::Union{Nothing,Component}, data) = doodle(data)
 
 const depth = Ref{Int}(0)
+const stop = Ref{Bool}(false)
 
-emit(d::InlineResult, e) = @dynamic! let depth=0; emit(d.view, e) end
-emit(d::InlineResult, e::Events.Key) = @dynamic! let depth=0
+emit(d::InlineResult, e) = @dynamic! let depth=0, stop=false; emit(d.view, e) end
+emit(d::InlineResult, e::Events.Key) = @dynamic! let depth=0, stop=false
   isnothing(d.focused_node) || emit(d.focused_node, e)
 end
 emit(d::Component, e) = @dynamic! let context = d.context; emit(d.view, e) end
@@ -348,6 +349,7 @@ emit(d::Container, e) = begin
     child = d.children[path[ndepth]]
     @dynamic! let depth = ndepth; emit(child, e) end
   end
+  stop[] && return
   fn = get(d.attrs, Events.name(e), nothing)
   isnothing(fn) ? nothing : fn(e)
 end
