@@ -1,17 +1,21 @@
-# Rutherford
+# Rutherford.jl: Generic UI Programming
 
-A UI toolkit based on [Electron](//github.com/atom/electron). Also integrates with Juno, the Julia extension for Atom.
+Julia is the first language to implement a really good generic programming system. Rutherford.jl aims to extend this capability into UI programming where there are a couple complications.
 
-## Top Level Design
+Firstly, UIs mutate the data that they depend on. With a normal function if your data isn't in the right format you will just convert it and move on. But with UIs you also need to convert the mutations. And since those mutations are generated dynamically and asynchronously that's not so easy to do.
 
-<img src="Static UI.png" align="right" width="280" title="Static UI"/>
+Secondly, UI's have opinions. Normally functions are computing something that is well defined and either right or wrong. But UI's aren't that. For any given data there are many sensible UIs that could be generated for it and the difference between them can be as trivial as a colour change.
 
-The simplest UI just takes some data and creates a static visualization of it. One example is `ls(1)` which presents a list of files in a given directory. It can be implemented with a simple function in almost any language. But it falls short when the the list of files is too long to fit on the users screen at one time. Solving this requires you to keep track of scroll state which necessarily makes the UI's architecture more complicated. What was a simple function now needs to be able to modify its input. Creating a cyclic relationship between the UI and the data it presents.
-<img src="Interactive UI.png" align="right" width="280" title="Interactive UI"/>
+Ultimately what these two things mean is that as the author of a generic UI you need to assume that you don't know how to access the data you are presenting, you don't know how to mutate it, and you don't even know exactly what the end user wants the UI to look like. At this point you might think writing generic UIs is a fools errand. But it's not. There is still a lot that you can do. Firstly you can define the structure of the UI. You can define the interactions that users can perform and it and you can describe the mutations that will result. And you can even provide sensible defaults for all the end user specific stuff like how to access data, how things should look, and how the mutations should be interpreted. Which will ultimately mean that the end user can plonk your UI component into their's and then gradually specialise certain functions until it works.
 
-Rutherford enables you to implement this architecture by rendering your UI using a single function that takes one large data graph as input. Your UI will expose event listeners that will be invoked as the user interacts with the UI. These listeners will then modify the data graph and the rendering function will be run again on the updated data to produce a whole new UI. The difference between the two UI's will then be computed by Rutherford and it will apply a patch to change what's rendered on the screen to match what the new UI asks for. Therefore, as a developer using Rutherford, you write code that describes how a given set of data should be rendered. And Code which describes how user interactions affect the data. This is as simple as it can be.
+The solution to all this is surprisingly simple. UIs can naturally be described using a tree data structure. So making the behaviour of this tree generic is just a matter of using custom types to uniquely tag each part of the tree that we think the end user might want to specialise. With this in mind we can now take a look at the API.
 
-[Escher.jl](http://escher-jl.org) is similar but with it you render a static UI then wire up the interactive UI architecture described here in just the bits that are actually interactive. This is likely to perform better but requires you to break up your data into little chunks designed for each little interactive section of your UI. Then you have to reassemble those chunks when you want to persist the data back into your database. So it's extra work. Rutherford can be thought of as Escher.jl were you're only allowed one Signal. And since I like to think of Signals as a reification of time it makes sense for there to only be one of them per app. Or really per user but that's a problem you to puzzle over.
+## API
+
+1. `@component(name::Symbol)` This creates a type that can be used in a UI tree and will enable end users to specialise the rest of Rutherford.jl's API on them
+2. `draw([::Context,] data)` As the user of someone else's component or datatype, you can override the default rendering by defining a draw method for the context you are using it in.
+3. `doodle([::Component,] data)` If you are creating a Component you should define the 2 argument version. If you a creating a DataType you should define the single argument version
+4. `data(::Context)` This is where the `data` parameter for `draw` is generated. In here you should get the data that will be presented by a component and convert it into the format the component is expecting
 
 ## Juno
 
@@ -20,13 +24,13 @@ Juno integration is just a matter of loading one file on the Atom side and one o
 Add this to your `~/.atom/init.coffee`
 
 ```js
-require process.env.HOME + "/.kip/repos/jkroso/Rutherford.jl/Juno/main.coffee"
+require process.env.HOME + "/.kip/repos/jkroso/Rutherford.jl/juno.js"
 ```
 
 Add This to your `~/.julia/config/startup.jl`
 
 ```julia
-eval(:(isinteractive() && @require "github.com/jkroso/Rutherford.jl/Juno/main.jl"))
+eval(:(isinteractive() && @use "github.com/jkroso/Rutherford.jl/draw.jl"))
 ```
 
 And you will probably want to add some keyboard shortcuts to your `~/.atom/keymap.cson`

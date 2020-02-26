@@ -1,5 +1,6 @@
-@require "github.com/jkroso/Prospects.jl" assoc need dissoc unshift @struct
-@require "./Entities.jl" AbstractEntity AbstractCursor Entity
+@use "github.com/jkroso" [
+  "Prospects.jl" assoc dissoc unshift @struct
+  "DOM.jl" jsonable]
 
 """
 A `Change` represents a transformation that could be applied to a data structure.
@@ -8,7 +9,11 @@ I'm using a special type since it is simpler to implement methods on.
 """
 abstract type Change end
 
+# stops it sending event handlers to the JS runtime
+jsonable(::Change) = false
+
 @struct Merge(data) <: Change
+Merge(;keys...) = Merge(keys)
 @struct Unshift(item) <: Change
 @struct Assoc(key, value) <: Change
 @struct Swap(value) <: Change
@@ -38,14 +43,3 @@ apply(u::Unshift, data) = unshift(data, u.item)
 apply(s::Swap, data) = s.value
 apply(a::Delete, data) = nothing
 apply(a::Dissoc, data) = dissoc(data, a.key)
-
-"""
-Convert a change designed to be applied to a `Cursor` to one that can be applied
-to a `Entity`
-"""
-globalize(c::Change, cursor::Entity) = c
-globalize(c::Change, cursor::AbstractCursor) = globalize(Assoc(cursor.key, c), cursor.parent)
-globalize(d::Delete, c::AbstractCursor) = globalize(Dissoc(c.key), c.parent)
-
-"`globalize` a `change` and apply it to the state of the `currentUI`"
-function transact end

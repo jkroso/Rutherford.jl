@@ -1,205 +1,67 @@
-@require "github.com/jkroso/DOM.jl" => DOM Events Node Container HTML @dom @css_str add_attr
-@require "github.com/MikeInnes/MacroTools.jl" => MacroTools @capture postwalk
-@require "github.com/jkroso/DynamicVar.jl" @dynamic!
-@require "github.com/jkroso/Prospects.jl" Field assoc push
-@require "github.com/JunoLab/Atom.jl" => Atom
-@require "github.com/jkroso/Electron.jl" App
-@require "github.com/jkroso/write-json.jl"
-@require "./Entities" Entity AbstractEntity need onchange
-@require "./transactions" transact globalize apply Change
-
+@use "github.com" [
+  "MikeInnes/MacroTools.jl" => MacroTools @match
+  "jkroso" [
+    "DOM.jl" => DOM Node Container HTML @dom @css_str add_attr [
+      "Events.jl" => Events]
+    "Prospects.jl" Field assoc push @struct
+    "Destructure.jl" @destruct
+    "Promises.jl" @defer Deferred need pending
+    "DynamicVar.jl" @dynamic!]
+  "JunoLab/Atom.jl" => Atom]
+@use "./transactions" apply Change Assoc Dissoc Delete
 import Sockets: listenany, accept, TCPSocket
 
 const app_path = joinpath(@dirname(), "app")
 const json = MIME("application/json")
 const msglock = ReentrantLock()
-const currentUI = Ref{Any}(nothing)
-const cursor = Ref{AbstractEntity}(Entity(nothing))
 
 msg(x; kwargs...) = msg(x, kwargs)
-msg(a::App, data) = msg(a.proc.in, data)
 msg(io::IO, data) =
   lock(msglock) do
     show(io, json, data)
     write(io, '\n')
   end
 
-"A Window corresponds to an OS window and can be used to display a UI"
-mutable struct Window
-  sock::TCPSocket
-  view::Node
-  UI::Any
-  loop::Task
-  state::Symbol
-end
-
-Window(a::App; kwargs...) = begin
-  port, server = listenany(3000)
-  initial_view = @dom[:html
-    [:head
-      [:script "const params=" repr(json, (port=port, runtime=DOM.runtime))]
-      [:script "require('$(joinpath(@dirname(), "index.js"))')"]]
-    [:body]]
-
-  # tell electron to create a window
-  msg(a; title=a.title, kwargs..., html=repr("text/html", initial_view))
-
-  # wait for that window to connect with this process
-  sock = accept(server)
-
-  # send events to the UI
-  loop = @async for line in eachline(sock)
-    DOM.propagate(w, Events.parse_event(line))
-  end
-
-  w = Window(sock, initial_view, nothing, loop, :ok)
-end
-
-Base.wait(e::Window) = fetch(e.loop)
-msg(a::Window, data) = msg(a.sock, data)
-
 const done_task = Task(identity)
 done_task.state = :done
 
-"""
-A UI manages the presentation and manipulation of value. One UI
-can be displayed on multiple devices.
-"""
-mutable struct UI
-  view::Node
-  render::Any # any callable object
-  devices::Vector
-  display_task::Task
-  data::Entity
-  focused_node::Union{Nothing,Node}
-end
-
-UI(fn, data) = begin
-  ui = UI(DOM.null_node, fn, [], done_task, Entity(data), nothing)
-  onchange(()->queue_display(ui), ui.data)
-  ui
-end
-
-transact(change::Change) = begin
-  ui = currentUI[]
-  change = globalize(change, cursor[])
-  ui.data.value = apply(change, need(ui.data))
-  nothing
-end
-
-DOM.propagate(ui::UI, e::Events.Event) = propagate_event(ui, ui.view, e)
-DOM.propagate(ui::UI, e::Events.Key) = propagate_event(ui, ancestry(ui.focused_node, ui.view), e)
-
-propagate_event(ui, ::Nothing, e) = nothing
-propagate_event(ui, target, e) = @dynamic! let currentUI = ui, cursor = ui.data
-  @static if isinteractive()
-    Base.invokelatest(DOM.propagate, target, e)
-  else
-    DOM.propagate(target, e)
-  end
-end
-
-ancestry(node::Nothing, container, path) = nothing
-ancestry(node, container, path=Node[container]) = begin
-  node === container && return path
-  node isa DOM.Text && return nothing
-  for child in container.children
-    val = ancestry(node, child, push(path, child))
-    val !== nothing && return val
-  end
-end
-
-msg(ui::UI, data) = foreach(d->msg(d, data), ui.devices)
-
-"""
-Connect a Window with a UI so that the UI can render to the window
-and the window can send events to the UI for it to handle
-"""
-couple(w::Window, ui::UI) = begin
-  @assert w.UI == nothing "This window is already coupled with a UI"
-  w.UI = ui
-  push!(ui.devices, w)
-  display(w, ui)
-end
-
-decouple(w::Window, ui::UI) = begin
-  w.UI = nothing
-  deleteat!(ui.devices, findfirst(ui.devices, w))
-end
-
-"Generate a DOM view using the UI's current state"
-render(ui::UI) = @dynamic! let currentUI = ui, cursor = ui.data
-  ui.render(need(ui.data))
-end
-
-"""
-Defining methods that render cursors directly is too verbose. So this method places the cursor on
-the dynamic variable `cursor` and calls `render` with the unwrapped value
-"""
-render(c::AbstractEntity) = @dynamic! let cursor = c
-  render(need(c))
-end
-
-queue_display(::Nothing) = nothing
-queue_display(ui::UI) = begin
-  istaskdone(ui.display_task) || return
-  ui.display_task = @async display(ui)
-  nothing
-end
-
-Base.display(ui::UI) = begin
-  state = need(ui.data) isa Atom.EvalError ? :error : :ok
-  ui.focused_node = nothing
-  view = Atom.@errs render(ui)
-  try
-    if view isa Atom.EvalError
-      state = :error
-      ui.view = render(view)
-    else
-      ui.view = view
-    end
-    for device in ui.devices
-      device.state = state
-      display(device, ui.view)
-    end
-  catch e
-    @show e
-  end
-end
-
 "Set the target of keyboard events"
-focus(node, isfocused=true) = begin
-  if isfocused
-    currentUI[].focused_node = add_attr(node, :isfocused, true)
+DOM.focus(node::DOM.Node) = begin
+  device = current_device()
+  if !isnothing(device) && node.attrs[:focus]
+    @assert isnothing(device.focused_node) "A node is already focused"
+    device.focused_node = node
   else
     node
   end
 end
 
-Base.display(w::Window, ui::UI) = begin
-  ui.view = render(ui)
-  display(w, ui.view)
-end
+@struct CustomEvent(name::Symbol, path::Events.DOMPath, value::Any) <: Events.Event
+Events.name(e::CustomEvent) = e.name
+Events.path(e::CustomEvent) = e.path
 
-Base.display(w::Window, view::Node) = begin
-  # wrap the view because DOM expects it to be a proper HTML document
-  wrapped = @dom[HTML view]
-  patch = DOM.diff(w.view, wrapped)
-  patch == nothing || msg(w, patch)
-  w.view = wrapped
+"""
+Event handlers just store the context along with a user defined handler so when the
+event occurs it can be handled in the same context the handler assigned in
+"""
+@struct EventHandler(handler, context)
+DOM.wrap_handler(::Symbol, handler) = EventHandler(handler, context[])
+DOM.jsonable(::EventHandler) = false
+
+(h::EventHandler)(e) = @dynamic! let context=h.context; invoke_handler(h.handler, e) end
+invoke_handler(c::Change, e) = (transact(c); nothing)
+invoke_handler(f::Function, e::CustomEvent) = invoke_handler(f, e.value)
+invoke_handler(f::Function, e) = begin
+  change = f(e)
+  change isa Change && transact(change)
   nothing
 end
 
-DOM.propagate(w::Window, e::Events.Event) =
-  @dynamic! let currentUI = w.UI, cursor = w.UI.data
-    DOM.propagate(w.view, e)
-  end
-
 async(fn::Function, pending::Node; onerror=handle_async_error) = begin
-  ui = currentUI[] # deref here because we are using @dynamic! rather than @dynamic
+  device = current_device()
   n = AsyncNode(true, pending, @async begin
     view = try need(fn()) catch e onerror(e, ui, n) end
-    n.iscurrent && msg(ui, command="AsyncNode", id=objectid(n), value=view)
+    n.iscurrent && msg(device, command="AsyncNode", id=objectid(n), value=view)
     view
   end)
 end
@@ -227,75 +89,94 @@ DOM.diff(a::AsyncNode, b::AsyncNode) = begin
 end
 
 """
-Extends the `@dom` macro to provide special syntax for cursor scope refinement
-
-```julia
-@dom[TextField → :input]
-```
-"""
-macro ui(expr)
-  expr = macroexpand(__module__, Expr(:macrocall, getfield(DOM, Symbol("@dom")), __source__, expr))
-  expr = postwalk(expr) do x
-    if @capture(x, $(GlobalRef(DOM, :(=>)))(:key_, value_)) && startswith(string(key), "on")
-      :($(QuoteNode(key)) => $handler($value))
-    elseif @capture(x, (f_ → key_)(attrs_, children_))
-      :($scoped($f, $key, $attrs, $children))
-    else
-      x
-    end
-  end
-  esc(expr)
-end
-
-scoped(fn, key, attrs, children) = begin
-  c = cursor[][key]
-  @dynamic! let cursor = c
-    if applicable(fn, attrs, children)
-      fn(attrs, children)
-    else
-      fn(attrs, children, need(c))
-    end
-  end
-end
-
-"Wrap `fn` so it will always be invoked with the `cursor` in its current state"
-handler(fn) = begin
-  state = cursor[]
-  maxargs = max(map(m->m.nargs-1, methods(fn))...)
-  if maxargs == 1
-    (event) -> @dynamic! let cursor = state; fn(event) end
-  else
-    (_) -> @dynamic! let cursor = state; fn() end
-  end
-end
-
-"""
 A UI chunk that has some private state associated with it. Component subtypes should
 be created with the `@component` macro. e.g `@component SubtypeName`. Because they need
 to have certain fields in a certain order
 
-All Components should implement `render(<:Component)` and `default_state(<:Component)`
+All Components should implement `doodle(<:Component)`
 """
 abstract type Component <: DOM.Node end
 
-"Generate the initial state for a Component"
-default_state(::Type{<:Component}) = nothing
-
 "Makes it easy to define a new type of Component"
-macro component(name)
-  name = esc(name)
-  Base.@__doc__(quote
-    mutable struct $name <: Component
+macro component(expr)
+  name, state = @match expr begin
+    s_(state=x_) => (esc(s), x)
+    s_Symbol => (esc(s), nothing)
+    _ => error("Incorrect syntax: $expr")
+  end
+  quote
+    Base.@__doc__ mutable struct $name <: Component
       attrs::AbstractDict{Symbol,Any}
       content::Vector{DOM.Node}
       state::Any
-      UI::Union{Nothing,UI}
-      cursor::AbstractEntity
-      view::DOM.Node
-      $name(attrs, content) = new(attrs, content, default_state($name), currentUI[], cursor[])
+      ctx::AbstractContext
+      view::Deferred{DOM.Node}
     end
-  end)
+    function $name(attrs, content)
+      c = $name(attrs, content, $(esc(state)), context[],
+                @defer incontext(draw, c.context)::DOM.Node)
+    end
+  end
 end
+
+incontext(fn, value) = begin
+  old = context[]
+  context[] = value
+  r = Base.invokelatest(fn, value)
+  context[] = old
+  r
+end
+
+"""
+Contexts provide infomation about what's being rendered. By specializing methods
+on them you can precisly alter the way Components are drawn and how they get/set
+the data they depend upon
+"""
+abstract type AbstractContext end
+
+"Provides access to the current rendering context"
+const context = Ref{Union{Nothing,AbstractContext}}(nothing)
+
+"""
+A Context is a Component with a linked list of all it's parents
+"""
+struct Context{Node<:Component,Parent<:AbstractContext} <: AbstractContext
+  node::Node
+  parent::Parent
+end
+
+"""
+Make it easier to define complex contexts
+
+```julia
+@Context[A B] == Context{A,Context{B,T}} where T
+```
+"""
+macro Context(expr)
+  @assert Meta.isexpr(expr, :hcat)
+  out = foldr(expr.args, init=esc(:T)) do name, out
+    :(Context{$(esc(name)), $out})
+  end
+  :($out where $(esc(:T)) <: AbstractContext)
+end
+
+Base.getindex(parent::AbstractContext, child::Component) = Context(child, parent)
+
+"Get the data associate with a given Context"
+data(ctx::Context) = begin
+  pd = data(ctx.parent)
+  key = path(ctx)
+  key == nothing ? pd : get(pd, key)
+end
+
+"""
+Most of the time getting the data for a component just involves getting the data
+of its parent context and refining it by selecting on a key or index. So by default
+`data(::Context)` will use this function to determine that key. And in turn this
+function looks at the `:key` attribute of the current component.
+"""
+path(ctx::Context) = path(ctx.node)
+path(c::Component) = get(c.attrs, :key, nothing)
 
 add_attr(c::Component, key::Symbol, value::Any) = (c.attrs = add_attr(c.attrs, key, value); c)
 
@@ -304,25 +185,207 @@ DOM.diff(a::T, b::T) where T<:Component = begin
   DOM.diff(a.view, b.view)
 end
 
-DOM.propagate(c::Component, e::Events.Event) = DOM.propagate(c.view, e)
-DOM.emit(c::Component, e::Events.Event) = DOM.emit(c.view, e)
-
 Base.convert(::Type{<:DOM.Primitive}, c::Component) = c.view
 Base.show(io::IO, m::MIME, c::Component) = show(io, m, c.view)
 
 Base.getproperty(c::Component, f::Symbol) = getproperty(c, Field{f}())
 Base.getproperty(c::Component, ::Field{:children}) = c.view.children
-Base.getproperty(c::Component, ::Field{:view}) = begin
-  isdefined(c, :view) && return getfield(c, :view)
-  @dynamic! let currentUI = c.UI, cursor = c.cursor
-    setfield!(c, :view, render(c))
-  end
-end
+Base.getproperty(c::Component, ::Field{:view}) = need(getfield(c, :view))
+Base.getproperty(c::Component, ::Field{:context}) = getfield(c, :ctx)[c]
 
 Base.setproperty!(c::Component, f::Symbol, x) = setproperty!(c, Field{f}(), x)
 Base.setproperty!(c::Component, ::Field{:state}, x) = begin
   setfield!(c, :state, x)
-  queue_display(c.UI)
+  schedule_display(c.context)
 end
 
-export @ui, @css_str, cursor, render
+# TODO: figure out why I need to buffer the JSON in a String before writing it
+msg(x::String, args...) =
+  Atom.isactive(Atom.sock) && println(Atom.sock, repr("application/json", Any[x, args...]))
+
+const event_parsers = Dict{String,Function}(
+  "mousedown" => d-> Events.MouseDown(d["path"], Events.MouseButton(d["button"]), d["position"]...),
+  "mouseup" => d-> Events.MouseUp(d["path"], Events.MouseButton(d["button"]), d["position"]...),
+  "mouseover" => d-> Events.MouseOver(d["path"]),
+  "mouseout" => d-> Events.MouseOut(d["path"]),
+  "click" => d-> Events.Click(d["path"], Events.MouseButton(d["button"]), d["position"]...),
+  "dblclick" => d-> Events.DoubleClick(d["path"], Events.MouseButton(d["button"]), d["position"]...),
+  "mousemove" => d-> Events.MouseMove(d["path"], d["position"]...),
+  "keydown" => d-> Events.KeyDown(UInt8[], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
+  "keyup" => d-> Events.KeyUp(UInt8[], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
+  "resize" => d-> Events.Resize(d["width"], d["height"]),
+  "scroll" => d-> Events.Scroll(d["path"], d["position"]...))
+
+Atom.handle("event") do id, data
+  event = event_parsers[data["type"]](data)
+  emit(inline_displays[id], event)
+end
+
+Atom.handle("reset module") do file
+  delete!(Kip.modules, file)
+  getmodule(file)
+  nothing
+end
+
+@struct Snippet(text::String, line::Int32, path::String, id::Int32)
+
+mutable struct InlineResult
+  snippet::Snippet
+  state::Symbol
+  display_task::Task
+  focused_node::Union{Nothing,DOM.Node}
+  data::Any
+  view::DOM.Node
+  InlineResult(s) = new(s, :ok, done_task, nothing)
+end
+
+@struct JunoResult(device::InlineResult) <: AbstractContext
+
+msg(::InlineResult, data) = msg(data[:command], data)
+data(jr::JunoResult) = jr.device.data
+
+"Get the Module associated with the current file"
+getmodule(path) =
+  get!(Kip.modules, path) do
+    @eval Main module $(Symbol(:⭒, Kip.pkgname(path)))
+      using InteractiveUtils
+      using Kip
+    end
+  end
+
+const inline_displays = Dict{Int32,InlineResult}()
+
+Atom.handle("rutherford eval") do data
+  @destruct {"text"=>text, "line"=>line, "path"=>path, "id"=>id} = data
+  snippet = Snippet(text, line, path, id)
+  device = InlineResult(snippet)
+  inline_displays[id] = device
+  Base.invokelatest(display_result, device, evaluate(device))
+  for device in values(inline_displays)
+    device.snippet.line == line && continue
+    Base.invokelatest(display_result, device, evaluate(device))
+  end
+end
+
+evaluate(s::Snippet) =
+  lock(Atom.evallock) do
+    Atom.withpath(s.path) do
+      Atom.@errs include_string(getmodule(s.path), s.text, s.path, s.line)
+    end
+  end
+
+evaluate(d::InlineResult) = begin
+  result = evaluate(d.snippet)
+  d.state = result isa Atom.EvalError ? :error : :ok
+  result
+end
+
+display_result(d::InlineResult, result) = begin
+  d.data = result
+  schedule_display(d)
+end
+
+Base.display(d::InlineResult, view::DOM.Node) = begin
+  # update CSS if its stale
+  if DOM.css[].state == pending
+    msg("stylechange", need(DOM.css[]))
+  end
+  if isdefined(d, :view)
+    patch = DOM.diff(d.view, view)
+    patch == nothing || msg("patch", (id=d.snippet.id, patch=patch, state=d.state))
+  else
+    msg("render", (state=d.state, id=d.snippet.id, dom=view))
+  end
+  d.view = view
+end
+
+Atom.handle("result done") do id
+  delete!(inline_displays, id)
+end
+
+schedule_display(ctx::Context) = schedule_display(ctx.parent)
+schedule_display(jr::JunoResult) = schedule_display(jr.device)
+schedule_display(d::InlineResult) = begin
+  istaskdone(d.display_task) || return
+  d.display_task = @async begin
+    d.focused_node = nothing
+    try
+      # if it ends in a semicolon then the user doesn't want to see the result
+      view = if Atom.ends_with_semicolon(d.snippet.text) && d.state == :ok
+        @dom[:span class="icon icon-check"]
+      else
+        incontext(draw, JunoResult(d))
+      end
+      display(d, view)
+    catch e
+      Base.showerror(stderr, e)
+    end
+  end
+  nothing
+end
+
+"""
+Serves as a fallback for `draw()`. If you are implmenting a new datatype or a custom UI
+Component for an existing data type then this is the method you should implement
+"""
+function doodle end
+
+"""
+If you want to customise the way a datatype looks in a certain context then this is the
+method you need to specialise
+"""
+function draw end
+
+draw(ctx::AbstractContext) = draw(ctx, data(ctx))
+draw(ctx::AbstractContext, data) = doodle(component(ctx), data)
+component(::JunoResult) = nothing
+component(ctx::Context) = ctx.node
+doodle(::Union{Nothing,Component}, data) = doodle(data)
+
+const depth = Ref{Int}(0)
+
+emit(d::InlineResult, e) = @dynamic! let depth=0; emit(d.view, e) end
+emit(d::InlineResult, e::Events.Key) = @dynamic! let depth=0
+  isnothing(d.focused_node) || emit(d.focused_node, e)
+end
+emit(d::Component, e) = @dynamic! let context = d.context; emit(d.view, e) end
+emit(d::Container, e) = begin
+  ndepth = depth[] + 1
+  path = Events.path(e)
+  if length(path) >= ndepth
+    child = d.children[path[ndepth]]
+    @dynamic! let depth = ndepth; emit(child, e) end
+  end
+  fn = get(d.attrs, Events.name(e), nothing)
+  isnothing(fn) ? nothing : fn(e)
+end
+
+# Generate a custom event
+emit(name::Symbol, value) = begin
+  device = current_device()
+  node = component(context[])
+  path = findpath(device.view, node)
+  e = CustomEvent(name, path, value)
+  emit(device, e)
+end
+
+findpath(parent, target, path=UInt8[]) = begin
+  parent === target && return path
+  for (i,child) in enumerate(parent.children)
+    p = findpath(child, target)
+    isnothing(p) || return pushfirst!(p, i)
+  end
+end
+
+transact(change::Change) = transact(change, context[])
+transact(change::Change, ctx::JunoResult) = display_result(ctx.device, apply(change, data(ctx)))
+transact(change::Change, ctx::Context) = transact(up(ctx, change), up(ctx))
+
+up(ctx::Context, c::Change) = Assoc(path(ctx), c)
+up(ctx::Context, c::Delete) = Dissoc(path(ctx))
+up(ctx::Context) = ctx.parent
+
+current_device(ctx=context[]) = top(ctx).device
+current_device(::Nothing) = nothing
+top(ctx::JunoResult) = ctx
+top(ctx::Context) = top(ctx.parent)

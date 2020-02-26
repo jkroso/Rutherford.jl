@@ -3,20 +3,28 @@
 # This example just renders the most recent user event type as
 # a string. It demonstrates the round trip latency of the system
 #
-@require "github.com/jkroso/Rutherford.jl" UI @ui @css_str
-@require "github.com/jkroso/Rutherford.jl/transactions" Swap transact
+@use "github.com/jkroso/Rutherford.jl" doodle @dom @css_str ["transactions.jl" Assoc]
 
-UI("Loading") do data
-  handler = e-> Swap(e) |> transact
-  @ui[:div css"""
-           display: flex
-           justify-content: space-around
-           align-items: center
-           width: 100%
-           height: 100%
-           """
-           onmousedown=handler
-           onmousemove=handler
-           onmouseup=handler
-    [:pre repr(data)]]
+struct AppState
+  event::Any
 end
+
+doodle(a::AppState) = begin
+  handler = e->Assoc(:event, e)
+  @dom[:div css"""
+            display: flex
+            justify-content: space-around
+            align-items: center
+            width: 900px
+            height: 100px
+            """
+            onmousedown=handler
+            onmousemove=handler
+            onmouseup=handler
+            onkeydown=handler
+            onkeyup=handler
+            focus=true
+    [:pre repr(a.event)]]
+end
+
+AppState("Loading")

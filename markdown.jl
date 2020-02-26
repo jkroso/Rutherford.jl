@@ -1,26 +1,43 @@
-@require "github.com/jkroso/DOM.jl" => DOM @dom @css_str
-@require "github.com/JunoLab/Atom.jl" => Atom
-@require "github.com/jkroso/DOM.jl/html"
+@use "github.com" [
+  "JunoLab/Atom.jl" => Atom
+  "jkroso" [
+    "DOM.jl" => DOM @dom @css_str ["html.jl";]
+    "Prospects.jl" flat]]
 import Markdown
 
 renderMD(v::Vector) = @dom[:div map(renderMD, v)...]
 renderMD(s::AbstractString) = @dom[:p parse(MIME("text/html"), s)]
-renderMD(p::Markdown.Paragraph) = @dom[:p map(renderMDinline, vcat(p.content))...]
-renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, vcat(b.content))...]
+renderMD(p::Markdown.Paragraph) = @dom[:p map(renderMDinline, flat(p.content))...]
+renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, flat(b.content))...]
 renderMD(l::Markdown.LaTeX) = @dom[:latex class="latex block" block=true Atom.latex2katex(l.formula)]
 renderMD(l::Markdown.Link) = @dom[:a href=l.url l.text]
 renderMD(::Markdown.HorizontalRule) = @dom[:hr]
 
 renderMD(h::Markdown.Header{l}) where l =
-  DOM.Container{Symbol(:h, l)}(DOM.Attrs(), map(renderMDinline, vcat(h.text)))
+  DOM.Container{Symbol(:h, l)}(DOM.Attrs(), map(renderMDinline, flat(h.text)))
+
+const lexer_map = Dict("jldoctest" => "julia")
+const lexers = let array = String[]
+  for line in eachline(IOBuffer(read(`pygmentize -L lexers`)))
+    startswith(line, '*') || continue
+    push!(array, split(line[3:end-1], ", ")...)
+  end
+  Set{String}(array)
+end
 
 renderMD(c::Markdown.Code) = begin
   language = isempty(c.language) ? "julia" : c.language
-  proc = open(`pygmentize -f html -O "noclasses" -l $(language)`, "r+")
+  lexer = language in lexers ? language : get(lexer_map, language, "text")
+  proc = open(`pygmentize -f html -O "noclasses" -l $(lexer)`, "r+")
   write(proc.in, c.code)
   close(proc.in)
   html = String(read(proc.out))
-  @dom[:pre [:code block=true parse(MIME("text/html"), html)]]
+  @dom[:code block=true
+             css"""
+             padding: 0
+             > .highlight {overflow: scroll; border-radius: 5px; border: 1px solid #e8e8e8}; white-space: pre
+             """
+             parse(MIME("text/html"), html)]
 end
 
 renderMD(f::Markdown.Footnote) =
@@ -36,7 +53,27 @@ renderMD(md::Markdown.Admonition) =
 renderMD(md::Markdown.List) =
   DOM.Container{Markdown.isordered(md) ? :ol : :ul}(
     DOM.Attrs(:start=>md.ordered > 1 ? string(md.ordered) : ""),
-    [@dom[:li renderMDinline(item)] for item in md.items])
+    map(renderListItem, flat(md.items)))
+
+renderListItem(item) = @dom[:li renderMDinline(item)]
+renderListItem(item::Markdown.Paragraph) = begin
+  content = flat(item.content)
+  first, rest = content[1], content[2:end]
+  m = first isa AbstractString ? match(r"^ *\[(x| )\] (.*)", first) : nothing
+  if m != nothing
+    @dom[:li class="task" css"""
+                          list-style: none
+                          > input[type="checkbox"]
+                            height: 1em
+                            margin: 0 0.5em 0 -2em
+                          """
+      [:input type="checkbox" checked=m.captures[1] == "x"]
+      [:label renderMDinline(m.captures[2])]
+      map(renderMDinline, rest)...]
+  else
+    @dom[:li map(renderMDinline, content)...]
+  end
+end
 
 renderMD(md::Markdown.Table) = begin
   align = map(md.align) do s

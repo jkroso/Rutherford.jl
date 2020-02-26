@@ -1,151 +1,20 @@
-@require ".." couple decouple UI msg render cursor need default_state @component
-@require "github.com/MikeInnes/MacroTools.jl" rmlines @capture
-@require "github.com/jkroso/DOM.jl" => DOM Events @dom @css_str
-@require "github.com/JunoLab/CodeTools.jl" => CodeTools
-@require "github.com/jkroso/Destructure.jl" @destruct
-@require "github.com/jkroso/DynamicVar.jl" @dynamic!
-@require "github.com/jkroso/Prospects.jl" assoc interleave
-@require "github.com/JunoLab/Atom.jl" => Atom
-@require "github.com/jkroso/write-json.jl"
-@require "../Entities" FieldTypeCursor
-@require "./markdown" renderMD
+@use "github.com" [
+  "MikeInnes/MacroTools.jl" rmlines @capture
+  "jkroso" [
+    "DOM.jl" => DOM @dom @css_str
+    "Prospects.jl" assoc interleave
+    "Destructure.jl" @destruct
+    "DynamicVar.jl" @dynamic!]
+  "JunoLab" [
+    "CodeTools.jl" => CodeTools
+    "Atom.jl" => Atom]]
+@use "." msg @component Context draw doodle path data
+@use "./markdown" renderMD
 using InteractiveUtils
 import Markdown
 import Dates
 
-# TODO: figure out why I need to buffer the JSON in a String before writing it
-msg(x::String, args...) =
-  Atom.isactive(Atom.sock) && println(Atom.sock, repr("application/json", Any[x, args...]))
-
-const event_parsers = Dict{String,Function}(
-  "mousedown" => d-> Events.MouseDown(d["path"], Events.MouseButton(d["button"]), d["position"]...),
-  "mouseup" => d-> Events.MouseUp(d["path"], Events.MouseButton(d["button"]), d["position"]...),
-  "mouseover" => d-> Events.MouseOver(d["path"]),
-  "mouseout" => d-> Events.MouseOut(d["path"]),
-  "click" => d-> Events.Click(d["path"], Events.MouseButton(d["button"]), d["position"]...),
-  "dblclick" => d-> Events.DoubleClick(d["path"], Events.MouseButton(d["button"]), d["position"]...),
-  "mousemove" => d-> Events.MouseMove(d["path"], d["position"]...),
-  "keydown" => d-> Events.KeyDown(UInt8[], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
-  "keyup" => d-> Events.KeyUp(UInt8[], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
-  "resize" => d-> Events.Resize(d["width"], d["height"]),
-  "scroll" => d-> Events.Scroll(d["path"], d["position"]...))
-
-# TODO: Should emit events on the device rather than the UI
-Atom.handle("event") do id, data
-  ui = inline_displays[id].ui
-  event = event_parsers[data["type"]](data)
-  DOM.propagate(ui, event)
-end
-
-Atom.handle("reset module") do file
-  delete!(Kip.modules, file)
-  getmodule(file)
-  nothing
-end
-
-struct Snippet
-  text::String
-  line::Int32
-  path::String
-  id::Int32
-end
-
-mutable struct InlineResult
-  snippet::Snippet
-  state::Symbol
-  ui::Union{UI,Nothing}
-  view::DOM.Node
-  InlineResult(s) = new(s, :ok)
-end
-
-msg(::InlineResult, data) = msg(data[:command], data)
-
-"Get the Module associated with the current file"
-getmodule(path) =
-  get!(Kip.modules, path) do
-    @eval Main module $(Symbol(:⭒, Kip.pkgname(path)))
-      using InteractiveUtils
-      using Kip
-    end
-  end
-
-const inline_displays = Dict{Int32,InlineResult}()
-
-evaluate(s::Snippet) =
-  lock(Atom.evallock) do
-    Atom.withpath(s.path) do
-      Atom.@errs include_string(getmodule(s.path), s.text, s.path, s.line)
-    end
-  end
-
-init_gui(d::InlineResult, result) = begin
-  @destruct {text,id} = d.snippet
-  d.state = result isa Atom.EvalError ? :error : :ok
-  # if it ends in a semicolon then the user doesn't want to see the result
-  if Atom.ends_with_semicolon(text) && state == :ok
-    result = icon("check")
-  end
-  Base.invokelatest(couple, d, gui(d, result))
-end
-
-Atom.handle("rutherford eval") do data
-  @destruct {"text"=>text, "line"=>line, "path"=>path, "id"=>id} = data
-  snippet = Snippet(text, line, path, id)
-  device = InlineResult(snippet)
-  inline_displays[id] = device
-  result = evaluate(snippet)
-  others = [(r, evaluate(r.snippet)) for r in values(inline_displays) if r.snippet.line != line]
-  Base.invokelatest(init_gui, device, result)
-  # redraw all other snippets
-  for (device, result) in others
-    Base.invokelatest(init_gui, device, result)
-  end
-end
-
-lastsheet = DOM.CSSNode()
-
-Base.display(d::InlineResult, view::DOM.Node) = begin
-  # update CSS if its stale
-  if DOM.stylesheets[1] != lastsheet
-    global lastsheet = DOM.stylesheets[1]
-    msg("stylechange", lastsheet)
-  end
-  if isdefined(d, :view)
-    patch = DOM.diff(d.view, view)
-    patch == nothing || msg("patch", (id=d.snippet.id, patch=patch, state=d.state))
-  else
-    msg("render", (state=d.state, id=d.snippet.id, dom=view))
-  end
-  d.view = view
-end
-
-couple(device::InlineResult, ui::UI) = begin
-  push!(ui.devices, device)
-  device.ui = ui
-  display(device, ui)
-end
-
-decouple(i::InlineResult, ui::UI) = begin
-  deleteat!(ui.devices, findfirst((x->x === i), ui.devices))
-  i.ui = nothing
-end
-
-Base.display(d::InlineResult, ui::UI) = begin
-  ui.view = render(ui)
-  display(d, ui.view)
-end
-
-Atom.handle("result done") do id
-  delete!(inline_displays, id)
-end
-
-gui(device, result) = UI(render, result)
-gui(device, result::UI) = result
-gui(device, result::DOM.Node) = UI(identity, result)
-
-"""
-Formats long numbers with commas seperating it into chunks
-"""
+"Formats long numbers with commas seperating it into chunks"
 seperate(value::Number; kwargs...) = seperate(string(convert(Float64, value)), kwargs...)
 seperate(value::Integer; kwargs...) = seperate(string(value), kwargs...)
 seperate(str::String, sep = ",", k = 3) = begin
@@ -153,8 +22,9 @@ seperate(str::String, sep = ",", k = 3) = begin
   str = parts[1]
   n = length(str)
   groups = (str[max(x-k+1, 1):x] for x in reverse(n:-k:1))
-  length(parts) == 1 && return join(groups, sep)
-  join([join(groups, sep), parts[2]], '.')
+  whole_part = @dom[:span interleave(groups, @dom[:span css"color: grey" sep])...]
+  length(parts) == 1 && return whole_part
+  @dom[:span whole_part @dom[:span css"color: grey" "."] parts[2]]
 end
 
 syntax(x) = @dom[:span class="syntax--language syntax--julia" class=syntax_class(x) repr(x)]
@@ -169,12 +39,32 @@ syntax_class(::Nothing) = ["syntax--constant"]
 syntax_class(::Function) = ["syntax--support", "syntax--function"]
 syntax_class(e::Missing) = []
 
-render(n::Union{AbstractFloat,Integer}) = @dom[:span class="syntax--language syntax--julia syntax--constant syntax--numeric" seperate(n)]
-render(x::Union{AbstractString,Regex,Symbol,Char,VersionNumber,Nothing,Number,Missing}) = syntax(x)
-render(b::Bool) = syntax(b)
-render(d::Dates.Date) = @dom[:span Dates.format(d, Dates.dateformat"dd U Y")]
-render(d::Dates.DateTime) = @dom[:span Dates.format(d, Dates.dateformat"dd/mm/Y H\h M\m S.s\s")]
-render(d::Dates.Time) = @dom[:span Dates.format(d, Dates.dateformat"HH:MM:S.s")]
+doodle(n::Union{AbstractFloat,Integer}) = @dom[:span class="syntax--language syntax--julia syntax--constant syntax--numeric" seperate(n)]
+doodle(x::Union{AbstractString,Regex,Symbol,Char,VersionNumber,Nothing,Number,Missing}) = syntax(x)
+doodle(b::Bool) = syntax(b)
+doodle(d::Dates.Date) = @dom[:span Dates.format(d, Dates.dateformat"dd U Y")]
+doodle(d::Dates.DateTime) = @dom[:span Dates.format(d, Dates.dateformat"dd/mm/Y H\h M\m S.s\s")]
+doodle(d::Dates.Time) = @dom[:span Dates.format(d, Dates.dateformat"HH:MM:S.s")]
+
+doodle(r::Rational) = begin
+  whole, part = divrem(r.num, r.den)
+  if whole == 0
+    fraction(r)
+  else
+    @dom[:span css"> :first-child {margin-right: 2px}" doodle(whole) fraction(part//r.den)]
+  end
+end
+
+fraction(r::Rational) =
+  @dom[:span css"""
+             display: inline-flex
+             flex-direction: column
+             line-height: 1em
+             vertical-align: middle
+             > .syntax--numeric {font-size: 0.8em}
+             > :first-child {border-bottom: 1px solid rgb(185,185,185); width: 100%; text-align: center}
+             """
+    doodle(r.num) doodle(r.den)]
 
 brief(m::Module) = @dom[:span class="syntax--keyword syntax--other" replace(repr(m), r"^Main\."=>"")]
 
@@ -198,7 +88,7 @@ getreadme(file::AbstractString) = begin
   nothing
 end
 
-render(m::Module) = begin
+doodle(m::Module) = begin
   readme = nothing
   header = if issubmodule(m)
     brief(m)
@@ -211,18 +101,18 @@ render(m::Module) = begin
     @dom[:div css"max-height: 500px; max-width: 1000px"
       if readme != nothing
         expandable(@dom[:h3 "Readme.md"]) do
-          @dom[:div css"margin-bottom: 20px" renderMDFile(readme)]
+          @dom[:div css"margin-bottom: 20px" drawMDFile(readme)]
         end
       end
       (@dom[:div css"display: flex"
         [:span String(name)]
         [:span css"padding: 0 10px" "→"]
-        isdefined(m, name) ? render(cursor[][name]) : fade("#undef")]
+        isdefined(m, name) ? @dom[PropertyValue key=name] : fade("#undef")]
       for name in names(m, all=true) if !occursin('#', String(name)) && name != nameof(m))...]
   end
 end
 
-renderMDFile(path) = resolveLinks(render(Markdown.parse_file(path, flavor=Markdown.github)), dirname(path))
+drawMDFile(path) = resolveLinks(doodle(Markdown.parse_file(path, flavor=Markdown.github)), dirname(path))
 
 resolveLinks(c::DOM.Node, dir) = c
 resolveLinks(c::DOM.Container, dir) = assoc(c, :children, map(c->resolveLinks(c, dir), c.children))
@@ -251,7 +141,6 @@ chevron(open) =
              """]
 
 "A summary of a datastructure"
-brief(data) = render(data)
 brief(u::UnionAll) = brief(u.body)
 brief(data::Union{AbstractDict,AbstractVector,Set,Tuple,NamedTuple}) =
   @dom[:span brief(typeof(data)) [:span css"color: rgb(104, 110, 122)" "[$(length(data))]"]]
@@ -266,17 +155,25 @@ union_params(u::Union) = push!(union_params(u.b), u.a)
 union_params(u) = Any[u]
 
 "By default just render the structure of the object"
-render(data::T) where T = begin
+doodle(data::T) where T = begin
   attrs = propertynames(data)
-  isempty(attrs) && return brief(T)
-  expandable(brief(T)) do
-    @dom[:div
-      (@dom[:div css"display: flex"
-        [:span String(field)]
-        [:span css"padding: 0 10px" "→"]
-        hasproperty(data, field) ? render(cursor[][field]) : fade("#undef")]
-       for field in attrs)...]
-  end
+  isempty(attrs) ? brief(T) : @dom[Expandable]
+end
+
+@component PropertyName
+@component PropertyValue
+data(ctx::Context{PropertyName}) = propertynames(data(ctx.parent))[path(ctx)]
+path(c::PropertyName) = c.attrs[:index]
+doodle(::PropertyName, name) = @dom[:span string(name)]
+
+brief(data::T) where T = @dom[:span brief(T) '[' length(propertynames(data)) ']']
+body(data::T) where T = begin
+  @dom[:div
+    (@dom[:div css"display: flex"
+      [PropertyName index=i]
+      [:span css"padding: 0 10px" "→"]
+      hasproperty(data, field) ? @dom[PropertyValue key=field] : fade("#undef")]
+     for (i, field) in enumerate(propertynames(data)))...]
 end
 
 brief(T::DataType) =
@@ -296,21 +193,25 @@ header(T::DataType) = begin
 end
 
 brief(t::TypeVar) = @dom[:span repr(t)]
-brief(s::Symbol) = render(s)
+brief(s::Symbol) = doodle(s)
 
-render(x::UnionAll) = render(x.body)
+doodle(x::UnionAll) = doodle(x.body)
 
-render(T::DataType) = begin
+@component FieldType
+data(ctx::Context{FieldType}) = fieldtype(data(ctx.parent), path(ctx))
+path(c::FieldType) = c.attrs[:name]
+
+doodle(T::DataType) = begin
   attrs = fields(T)
   isempty(attrs) && return header(T)
   expandable(header(T)) do
     @dom[:div
-      Atom.CodeTools.hasdoc(T) ? render(Base.doc(T)) : nothing
+      Atom.CodeTools.hasdoc(T) ? doodle(Base.doc(T)) : nothing
       [:div css"padding: 3px 5px; background: white; border-radius: 3px; margin: 3px 0"
         (@dom[:div css"display: flex"
           [:span String(name)]
           [:span "::"]
-          render(FieldTypeCursor(fieldtype(T, name), cursor[]))]
+          [FieldType name=name]]
         for name in attrs)...]
       expandable(@dom[:h4 "Constructors"]) do
         name = @dom[:span class="syntax--support syntax--function" string(T.name.name)]
@@ -318,11 +219,16 @@ render(T::DataType) = begin
           (render_method(m, name=name) for m in methods(T))...]
       end
       expandable(@dom[:h4 "Instance Methods"]) do
-        @dom[:div css"> * {display: block}"
-          (render(m) for m in methodswith(toUnionAll(T), supertypes=true))...]
+        ms = methodswith(toUnionAll(T), supertypes=true)
+        isempty(ms) && return @dom[:span "No methods for this type"]
+        @dom[:div css"> * {display: block}" map(doodle, ms)...]
       end]
   end
 end
+
+doodle(::Type{T}) where T <: Tuple = brief(T)
+doodle(u::Type{Union{}}) = @dom[:span "Union{}"]
+doodle(u::Union) = brief(u)
 
 toUnionAll(T::DataType) = T.name.wrapper
 toUnionAll(U::UnionAll) = U
@@ -330,7 +236,6 @@ toUnionAll(U::UnionAll) = U
 fields(T) = try fieldnames(T) catch; () end
 
 fade(s) = @dom[:span class="fade" s]
-icon(x) = @dom[:span class="icon $("icon-$x")"]
 
 expandpath(path) = begin
   isempty(path) && return (path, path)
@@ -356,7 +261,7 @@ brief(f::StackTraces.StackFrame) = begin
                      r"^([^(]+)\(.*\)$"=>s"\1")]
 end
 
-render(trace::StackTraces.StackTrace) = begin
+doodle(trace::StackTraces.StackTrace) = begin
   @dom[:div class="error-trace"
     map(trace) do frame
       @dom[:div class="trace-entry $(Atom.locationshading(string(frame.file))[2:end])"
@@ -371,7 +276,7 @@ end
 stripparams(t) = replace(t, r"\{([A-Za-z, ]*?)\}"=>"")
 interpose(xs, y) = map(i -> iseven(i) ? xs[i÷2] : y, 2:2length(xs))
 
-render(m::Method) = render_method(m)
+doodle(m::Method) = render_method(m)
 render_method(m::Method; name=name(m)) = begin
   tv, decls, file, line = Base.arg_decl_parts(m)
   params = [@dom[:span x isempty(T) ? "" : "::" [:span class="syntax--support syntax--type" stripparams(T)]]
@@ -384,59 +289,68 @@ end
 name(m::Base.MethodList) = @dom[:span class="syntax--support syntax--function" string(m.mt.name)]
 name(m::Method) = @dom[:span class="syntax--support syntax--function" string(m.name)]
 
-render(m::Base.MethodList) = begin
+doodle(m::Base.MethodList) = begin
   ms = collect(m)
-  isempty(ms) && return @dom [:span name(m) " has no methods"]
-  length(ms) == 1 && return render(ms[1])
-  expandable(@dom[:span name(m) " has $(length(ms)) methods"]) do
-    @dom[:div (@dom[:div render(method)] for method in ms)...]
-  end
+  isempty(ms) && return @dom[:span name(m) " has no methods"]
+  length(ms) == 1 && return doodle(ms[1])
+  @dom[Expandable]
 end
 
-render(f::Function) =
-  expandable(name(f)) do
-    @dom[:div css"""
-              max-width: 800px
-              white-space: normal
-              h1 {font-size: 1.4em}
-              pre {padding: 0}
-              > div:last-child > div:last-child {overflow: visible}
-              """
-      Atom.CodeTools.hasdoc(f) ? @dom[:div css"padding: 8px 0" render(Base.doc(f))] : nothing
-      render(methods(f))]
-  end
+brief(m::Base.MethodList) = @dom[:span name(m) " has $(length(collect(m))) methods"]
+body(m::Base.MethodList) = @dom[:div (@dom[:div doodle(method)] for method in m)...]
+
+@component MethodListView
+data(ctx::Context{MethodListView}) = methods(data(ctx.parent))
+
+doodle(f::Function) = @dom[Expandable]
+brief(f::Function) = name(f)
+body(f::Function) = begin
+  @dom[:div css"""
+            max-width: 800px
+            white-space: normal
+            h1 {font-size: 1.4em}
+            pre {padding: 0}
+            > div:last-child > div:last-child {overflow: visible}
+            """
+    Atom.CodeTools.hasdoc(f) ? @dom[:div css"padding: 8px 0" doodle(Base.doc(f))] : nothing
+    [MethodListView]]
+end
 
 isanon(f) = occursin('#', String(nameof(f)))
 name(f::Function) = @dom[:span class=syntax_class(f) isanon(f) ? "λ" : String(nameof(f))]
 
 # Markdown is loose with its types so we need special functions `renderMD`
-render(m::Markdown.MD) =
+doodle(m::Markdown.MD) =
   @dom[:div
     css"""
-    max-width: 1000px
+    max-width: 50em
     margin: 0 auto
     padding: 1.5em
     white-space: normal
-    font-family: SourceCodePro-Light
+    font: 17px/1.5em helvetica-light, sans-serif
     code.inline
       font-family: SourceCodePro-light
-      border-radius: 1em
+      border-radius: 3px
       padding: 0px 8px
       background: #f9f9f9
+      border: 1px solid #e8e8e8
     code > .highlight > pre
-      font-family: SourceCodePro-light
+      font: 0.9em SourceCodePro-light
       padding: 1em
+      margin: 0
     h1, h2, h3, h4
       font-weight: 600
       margin: 0.5em 0
     h1 {font-size: 2em; margin: 1.5em 0}
     h2 {font-size: 1.5em}
     h3 {font-size: 1.25em}
-    ul {margin: 1em 0; padding-left: 1em}
-    ul ul {margin: 0}
-    ul ul > li {list-style: circle}
-    ul li {line-height: 1.5em; list-style: decimal}
-    ul li p {margin-bottom: 0}
+    ul, ol
+      margin: 1em 0
+      padding-left: 2em
+      ul, ol {margin: 0}
+      li {line-height: 1.5em}
+      li p {margin-bottom: 0}
+      ul > li {list-style: circle}
     blockquote
       padding: 0 1em
       color: #6a737d
@@ -445,40 +359,44 @@ render(m::Markdown.MD) =
     """
     map(renderMD, CodeTools.flatten(m).content)...]
 
-render(x::Union{AbstractDict,AbstractVector}) = begin
-  isempty(x) && return brief(x)
-  expandable(()->body(x), brief(x))
-end
+doodle(x::Union{AbstractDict,AbstractVector,Set}) = isempty(x) ? brief(x) : @dom[Expandable]
 
-render(t::NamedTuple) = begin
-  length(t) < 5 && return literal(t)
-  expandable(()->body(t), brief(t))
-end
+@component DictKey
+@component DictValue
+@component IndexedItem
+@component SetItem
 
-render(t::Tuple) = begin
-  length(t) < 10 && return literal(t)
-  expandable(()->body(t), brief(t))
-end
+data(ctx::Context{SetItem}) = ctx.node.attrs[:value]
+data(ctx::Context{DictKey}) = collect(keys(data(ctx.parent)))[path(ctx)]
+
+body(dict::AbstractDict) =
+  @dom[:div
+    (@dom[:div css"display: flex"
+      [DictKey key=i]
+      [:span css"padding: 0 10px" "→"]
+      [DictValue key=key]]
+    for (i,key) in enumerate(keys(dict)))...]
+
+doodle(t::NamedTuple) = length(t) < 5 ? literal(t) : @dom[Expandable]
+doodle(t::Tuple) = length(t) < 10 ? literal(t) : @dom[Expandable]
 
 literal(t::Tuple) = begin
-  content = interleave(map(render, cursor[]), @dom[:span css"padding: 0 6px 0 0" ',']) |> collect
+  items = (@dom[IndexedItem key=i] for i in 1:length(t))
+  content = collect(interleave(items, @dom[:span css"padding: 0 6px 0 0" ',']))
   length(content) == 1 && push!(content, @dom[:span ','])
   @dom[:span css"display: flex; flex-direction: row" [:span '('] content... [:span ')']]
 end
 
 literal(t::NamedTuple) = begin
-  items = (@dom[:span css"display: flex; flex-direction: row" need(k) '=' render(v)] for (k,v) in cursor[])
-  content = interleave(items, @dom[:span css"padding: 0 6px 0 0" ',']) |> collect
+  items = (@dom[:span css"display: flex; flex-direction: row"
+             string(k) '=' [DictValue key=k]]
+           for k in keys(t))
+  content = collect(interleave(items, @dom[:span css"padding: 0 6px 0 0" ',']))
   length(content) == 1 && push!(content, @dom[:span ','])
   @dom[:span css"display: flex; flex-direction: row" [:span '('] content... [:span ')']]
 end
 
-render(s::Set) = begin
-  isempty(s) && return brief(s)
-  expandable(brief(s)) do
-    @dom[:div css"> * {display: block}" (render(v) for v in cursor[])...]
-  end
-end
+body(s::Set) = @dom[:div css"> * {display: block}" (@dom[SetItem value=v] for v in s)...]
 
 brief(nt::NamedTuple) =
   @dom[:span
@@ -488,54 +406,36 @@ brief(nt::NamedTuple) =
 body(nt::NamedTuple) =
   @dom[:div
     (@dom[:div css"display: flex"
-      String(need(key))
+      String(key)
       [:span css"padding: 0 5px" "="]
-      render(value)]
-    for (key, value) in cursor[])...]
-
-body(dict::AbstractDict) =
-  @dom[:div
-    (@dom[:div css"display: flex"
-      render(key)
-      [:span css"padding: 0 10px" "→"]
-      render(value)]
-    for (key, value) in cursor[])...]
+      [IndexedItem key=key]]
+    for key in keys(nt))...]
 
 body(v::Union{Tuple,AbstractVector}) =
-  @dom[:div css"> * {display: block}" map(render, cursor[])...]
-
-expandable(fn::Function, head) = @dom[Expandable thunk=fn head]
+  @dom[:div css"> * {display: block}" (@dom[IndexedItem key=i] for i in keys(v))...]
 
 "Shows a brief view that can be toggled into a more detailed view"
-@component Expandable
-default_state(::Type{Expandable}) = false
-render(e::Expandable) = begin
+@component Expandable(state=false)
+doodle(e::Expandable, data) = begin
   isopen = e.state
   @dom[:div
     [:div css"display: flex; flex-direction: row; align-items: center"
           onmousedown=(_)->e.state = !isopen
       chevron(isopen)
-      e.content...]
+      haskey(e.attrs, :head) ? e.attrs[:head] : brief(data)]
     if isopen
-      @dom[:div css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px" e.attrs[:thunk]()]
+      @dom[:div css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px"
+        haskey(e.attrs, :thunk) ? e.attrs[:thunk]() : body(data)]
     end]
 end
 
-render(e::Atom.EvalError) = begin
-  header = split(sprint(showerror, e.err), '\n')
+expandable(thunk, head) = @dom[Expandable thunk=thunk head=head]
+
+doodle(e::Atom.EvalError) = begin
   trace = Atom.cliptrace(Atom.errtrace(e))
-  head = @dom[:strong class="error-description" color(header[1])]
-  tail = color(join(header[2:end], '\n'))
-  if isempty(trace)
-    return length(header) == 1 ? head : expandable((()->tail), head)
-  end
-  expandable(head) do
-    if length(header) == 1
-      render(trace)
-    else
-      @dom[:div tail render(trace)]
-    end
-  end
+  head = @dom[:strong class="error-description" color(sprint(showerror, e.err))]
+  isempty(trace) && return head
+  @dom[:div head doodle(trace)]
 end
 
 "Handle ANSI color sequences"
@@ -574,10 +474,10 @@ const colors = Dict{UInt8,String}(
 
 const context = Ref{Symbol}(:general)
 
-render(e::Expr) = expr(e)
+doodle(e::Expr) = expr(e)
 
 expr(e::Expr) = expr(e, Val(e.head))
-expr(e::Any) = @dom[:span css"color: #383a42" bracket('(') render(e) bracket(')')]
+expr(e::Any) = @dom[:span css"color: #383a42" bracket('(') doodle(e) bracket(')')]
 expr(r::GlobalRef) = @dom[:span string(r)]
 expr(s::Symbol) =
   if context[] == :ref && s == :end
@@ -587,7 +487,7 @@ expr(s::Symbol) =
   else
     @dom[:span class="syntax--language syntax--julia" s]
   end
-expr(n::Union{Number,String,Char}) = render(n)
+expr(n::Union{Number,String,Char}) = doodle(n)
 expr(q::QuoteNode) =
   if q.value isa Symbol
     ast = Meta.parse(repr(q.value))
@@ -597,7 +497,7 @@ expr(q::QuoteNode) =
       expr(ast)
     end
   else
-    @dom[:span ':' bracket('(') render(q.value) bracket(')')]
+    @dom[:span ':' bracket('(') doodle(q.value) bracket(')')]
   end
 
 expr(string, ::Val{:string}) = begin
@@ -608,7 +508,13 @@ expr(string, ::Val{:string}) = begin
 end
 
 render_interp(x::String) = x
-render_interp(x) = @dom[:span class="syntax--variable syntax--interpolation syntax--julia" "\$(" render(x) ')']
+render_interp(x) =
+  @dom[:span class="syntax--variable syntax--interpolation syntax--julia"
+    if x isa Symbol
+      @dom[:span "\$$x"]
+    else
+      @dom[:span "\$(" doodle(x) ')']
+    end]
 
 expr(q, ::Val{:quote}) = begin
   @dom[:div
@@ -620,12 +526,13 @@ end
 
 expr(dolla, ::Val{:$}) = begin
   value = dolla.args[1]
-  is_simple = value isa Union{Symbol,Number}
   @dom[:span
     [:span class="syntax--keyword syntax--operator syntax--interpolation syntax--julia" '$']
-    if !is_simple bracket('(') end
-    expr(value)
-    if !is_simple bracket(')') end]
+    if value isa Union{Symbol,Number}
+      expr(value)
+    else
+      @dom[:span bracket('(') expr(value) bracket(')')]
+    end]
 end
 
 const comma = @dom[:span class="syntax--meta syntax--bracket syntax--julia" ',']
@@ -712,10 +619,12 @@ end
 
 expr(eq, ::Val{:kw}) = @dom[:span interleave(map(expr, eq.args), equals)...]
 
-expr(e, ::Val{:(::)}) = begin
-  left, right = e.args
-  @dom[:span expr(left) coloncolon type(right)]
-end
+expr(e, ::Val{:(::)}) =
+  if length(e.args) > 1
+    @dom[:span expr(e.args[1]) coloncolon type(e.args[2])]
+  else
+    @dom[:span coloncolon type(e.args[1])]
+  end
 
 expr(curly, ::Val{:curly}) = begin
   @capture curly name_{params__}
@@ -734,6 +643,14 @@ expr(fn, ::Val{:function}) = begin
     end_block]
 end
 
+expr(fn, ::Val{:->}) = begin
+  tuple,body = fn.args
+  @dom[:div
+    expr(tuple)
+    [:span class="syntax--keyword syntax--operator syntax--arrow syntax--julia" "->"]
+    expr(body)]
+end
+
 expr(c, ::Val{:comprehension}) = comprehension(c.args[1], bracket('['), bracket(']'))
 expr(g, ::Val{:generator}) = comprehension(g, bracket('('), bracket(')'))
 
@@ -747,7 +664,7 @@ end
 
 expr(t, ::Val{:tuple}) = begin
   content = @dynamic! let context = :tuple
-    interleave(map(expr, t.args), comma_seperator)
+    interleave(map(expr, t.args), comma_seperator) |> collect
   end
   length(content) == 1 && push!(content, comma)
   @dom[:span bracket('(') content... bracket(')')]
@@ -785,11 +702,7 @@ expr(r, ::Val{:ref}) = begin
 end
 
 const kw_const = @dom[:span class="syntax--keyword syntax--storage syntax--modifier syntax--julia" "const"]
-
-expr(c, ::Val{:const}) = begin
-  @dom[:span css"> :last-child {display: inline-flex}" kw_const ' ' expr(c.args[1])]
-end
-
+expr(c, ::Val{:const}) = @dom[:span css"> :last-child {display: inline-flex}" kw_const ' ' expr(c.args[1])]
 expr(cond, ::Val{:if}) = conditional(cond, kw_if)
 
 conditional(cond, kw) = begin

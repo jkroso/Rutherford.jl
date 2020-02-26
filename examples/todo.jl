@@ -1,74 +1,67 @@
-#! ../bin/rutherford
-#
-# This example is just a minimal Todo list. It's intended to show how
-# a typical app would operate over an immutable data structure
-#
-@require "github.com/jkroso/Rutherford.jl" UI render @ui @css_str cursor focus
-@require "github.com/jkroso/Rutherford.jl/transactions" Delete Merge Swap Assoc Unshift transact
-@require "github.com/jkroso/Rutherford.jl/stdlib" TextField
+@use "github.com/jkroso/Rutherford.jl" doodle draw @dom @css_str @Context [
+  "transactions.jl" Delete Merge Swap Assoc Unshift get
+  "stdlib" [
+    "TextField.jl" TextField
+    "Stack.jl" StackItem VStack]]
 
-struct Item
-  title::String
-  done::Bool
+struct AppState
+  input::String
+  items::Vector
 end
 
-const state = (input="",
-               items=[Item("GST", false),
-                      Item("Order pop-riveter", false),
-                      Item("Write todo example", true)])
+draw(::@Context[StackItem VStack], item) =
+  @dom[:div class.done=item.done
+            css"""
+            display: flex
+            align-items: center
+            padding: 10px
+            border-top: 1px solid rgb(180,180,180)
+            &:first-child {border-top: none}
+            input {margin: 10px}
+            span {flex-grow: 1}
+            &.done
+              text-decoration: line-through
+              color: rgb(180,180,180)
+            button
+              border: none
+              background: none
+              font-size: 1.5em
+              font-weight: lighter
+              color: rgb(180,180,180)
+              outline: none
+              &:hover {color: rgb(30,30,30)}
+            """
+    [:input :type=:checkbox
+            checked=item.done
+            onclick=Assoc(:done, !item.done)]
+    [:span item.title]
+    [:button "×" onclick=Delete()]]
 
-render(item::Item) =
- @ui[:div class.done=item.done
-          css"""
-          display: flex
-          align-items: center
-          padding: 10px
-          border-top: 1px solid rgb(180,180,180)
-          &:first-child
-            border-top: none
-          input
-            margin: 10px
-          span
-            flex-grow: 1
-          &.done
-            text-decoration: line-through
-            color: rgb(180,180,180)
-          button
-            border: none
-            background: none
-            font-size: 1.5em
-            font-weight: lighter
-            color: rgb(180,180,180)
-            outline: none
-            &:hover
-              color: rgb(30,30,30)
-          """
-   [:input :type=:checkbox
-           checked=item.done
-           onclick=()->transact(Assoc(:done, !item.done))]
-   [:span item.title]
-   [:button "×" onclick=()->transact(Delete())]]
-
-UI(state) do state
-  @ui[:div css"""
-           display: flex
-           flex-direction: column
-           width: 500px
-           margin: 10px
-           font-family: monospace
-           """
-    focus(@ui[TextField → :input
-      css"""
+doodle(::AppState) =
+  @dom[:div css"""
+            width: 500px
+            margin: 10px auto
+            font-family: monospace
+            """
+    [TextField css"""
       width: 100%
       font: 2em/1.8em monospace
       padding: 0 .8em
       border-radius: 3px
       border: 1px solid rgb(180,180,180)
       """
+      focus=true
       placeholder="What needs doing?"
+      key=:input
       onsubmit=txt-> if !isempty(txt)
-        transact(Merge((input=Swap(""), items=Unshift(Item(txt, false)))))
-      end])
-    [:ul css"margin: 20px 0; border: 1px solid rgb(180,180,180); padding: 0; width: 100%"
-      map(render, cursor[][:items])...]]
-end
+        Merge(input=Swap(""), items=Unshift((title=txt, done=false)))
+      end]
+    [VStack key=:items css"""
+                       border-radius: 3px
+                       border: 1px solid rgb(180,180,180)
+                       margin-top: 10px
+                       """]]
+
+AppState("", [(title="GST", done=false),
+              (title="Order pop-riveter", done=false),
+              (title="Write todo example", done=true)])
