@@ -13,14 +13,10 @@ import Sockets: listenany, accept, TCPSocket
 
 const app_path = joinpath(@dirname(), "app")
 const json = MIME("application/json")
-const msglock = ReentrantLock()
 
 msg(x; kwargs...) = msg(x, kwargs)
-msg(io::IO, data) =
-  lock(msglock) do
-    show(io, json, data)
-    write(io, '\n')
-  end
+# TODO: figure out why I need to buffer the JSON in a String before writing it
+msg(x::String, args...) = Atom.isactive(Atom.sock) && println(Atom.sock, repr(json, Any[x, args...]))
 
 const done_task = Task(identity)
 done_task.state = :done
@@ -198,10 +194,6 @@ Base.setproperty!(c::Component, ::Field{:state}, x) = begin
   setfield!(c, :state, x)
   schedule_display(c.context)
 end
-
-# TODO: figure out why I need to buffer the JSON in a String before writing it
-msg(x::String, args...) =
-  Atom.isactive(Atom.sock) && println(Atom.sock, repr("application/json", Any[x, args...]))
 
 const event_parsers = Dict{String,Function}(
   "mousedown" => d-> Events.MouseDown(d["path"], Events.MouseButton(d["button"]), d["position"]...),
