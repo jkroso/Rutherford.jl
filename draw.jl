@@ -89,6 +89,7 @@ getfile(m::Module) = begin
 end
 
 issubmodule(m::Module) = parentmodule(m) != m && parentmodule(m) != Main
+getreadme(::Nothing) = nothing
 getreadme(file::AbstractString) = begin
   dir = dirname(file)
   path = joinpath(dir, "Readme.md")
