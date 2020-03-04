@@ -40,11 +40,22 @@ syntax_class(::Function) = ["syntax--support", "syntax--function"]
 syntax_class(e::Missing) = []
 
 doodle(n::Union{AbstractFloat,Integer}) = @dom[:span class="syntax--language syntax--julia syntax--constant syntax--numeric" seperate(n)]
-doodle(x::Union{AbstractString,Regex,Symbol,Char,VersionNumber,Nothing,Number,Missing}) = syntax(x)
+doodle(x::Union{Regex,Symbol,Char,VersionNumber,Nothing,Number,Missing}) = syntax(x)
 doodle(b::Bool) = syntax(b)
 doodle(d::Dates.Date) = @dom[:span Dates.format(d, Dates.dateformat"dd U Y")]
 doodle(d::Dates.DateTime) = @dom[:span Dates.format(d, Dates.dateformat"dd/mm/Y H\h M\m S.s\s")]
 doodle(d::Dates.Time) = @dom[:span Dates.format(d, Dates.dateformat"HH:MM:S.s")]
+
+doodle(s::AbstractString) =
+  if occursin(r"\n", s)
+    @dom[:div class="syntax--string syntax--quoted syntax--triple syntax--double syntax--julia"
+              css"display: flex; flex-direction: column"
+      [:span "\"\"\""]
+      [:span css"white-space: pre" s]
+      [:span "\"\"\""]]
+  else
+    syntax(s)
+  end
 
 doodle(r::Rational) = begin
   whole, part = divrem(r.num, r.den)
