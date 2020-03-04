@@ -11,7 +11,22 @@
 @use "./transactions" apply Change Assoc Dissoc Delete
 import Sockets: listenany, accept, TCPSocket
 
-const app_path = joinpath(@dirname(), "app")
+# Hacks to get completion working with Kip modules
+const complete = Atom.handlers["completions"]
+Atom.handle("completions") do data
+  complete(assoc(data, "mod", getmodule(data["path"])))
+end
+Atom.getmodule(m::Module) = m
+Atom.getmodule(s::AbstractString) = begin
+  if occursin('⭒', s)
+    for m in values(Kip.modules)
+      string(m) == s && return m
+    end
+  else
+    invoke(Atom.getmodule, Tuple{Any}, s)
+  end
+end
+
 const json = MIME("application/json")
 
 msg(x; kwargs...) = msg(x, kwargs)
