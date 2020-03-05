@@ -27,6 +27,13 @@ seperate(str::String, sep = ",", k = 3) = begin
   @dom[:span whole_part @dom[:span css"color: grey" "."] parts[2]]
 end
 
+vstack(attrs, children) = @dom[:div{attrs...} css"display: flex; flex-direction: column" children...]
+hstack(attrs, children) = @dom[:div{attrs...} css"display: flex; flex-direction: row" children...]
+spacer(attrs, children) = begin
+  @destruct {width=0,height=0,rest...} = attrs
+  @dom[:div{style.width=string(width, "px"), style.height=string(height, "px"), rest...}]
+end
+
 syntax(x) = @dom[:span class="syntax--language syntax--julia" class=syntax_class(x) repr(x)]
 syntax_class(n::Bool) = ["syntax--constant", "syntax--boolean"]
 syntax_class(x::Number) = ["syntax--constant", "syntax--numeric"]
@@ -48,8 +55,7 @@ doodle(d::Dates.Time) = @dom[:span Dates.format(d, Dates.dateformat"HH:MM:S.s")]
 
 doodle(s::AbstractString) =
   if occursin(r"\n", s)
-    @dom[:div class="syntax--string syntax--quoted syntax--triple syntax--double syntax--julia"
-              css"display: flex; flex-direction: column"
+    @dom[vstack class="syntax--string syntax--quoted syntax--triple syntax--double syntax--julia"
       [:span "\"\"\""]
       [:span css"white-space: pre" s]
       [:span "\"\"\""]]
@@ -110,13 +116,13 @@ doodle(m::Module) = begin
     @dom[:span brief(m) " from " stacklink(file, 0)]
   end
   expandable(header) do
-    @dom[:div css"max-height: 500px; max-width: 1000px"
+    @dom[vstack css"max-width: 1000px"
       if readme != nothing
         expandable(@dom[:h3 "Readme.md"]) do
           @dom[:div css"margin-bottom: 20px" drawMDFile(readme)]
         end
       end
-      (@dom[:div css"display: flex"
+      (@dom[hstack
         [:span String(name)]
         [:span css"padding: 0 10px" "→"]
         isdefined(m, name) ? @dom[PropertyValue key=name] : fade("#undef")]
@@ -180,8 +186,8 @@ doodle(::PropertyName, name) = @dom[:span string(name)]
 
 brief(data::T) where T = @dom[:span brief(T) '[' length(propertynames(data)) ']']
 body(data::T) where T = begin
-  @dom[:div
-    (@dom[:div css"display: flex"
+  @dom[vstack
+    (@dom[hstack
       [PropertyName index=i]
       [:span css"padding: 0 10px" "→"]
       hasproperty(data, field) ? @dom[PropertyValue key=field] : fade("#undef")]
@@ -217,23 +223,22 @@ doodle(T::DataType) = begin
   attrs = fields(T)
   isempty(attrs) && return header(T)
   expandable(header(T)) do
-    @dom[:div
+    @dom[vstack
       Atom.CodeTools.hasdoc(T) ? doodle(Base.doc(T)) : nothing
-      [:div css"padding: 3px 5px; background: white; border-radius: 3px; margin: 3px 0"
-        (@dom[:div css"display: flex"
+      [vstack css"padding: 3px 5px; background: white; border-radius: 3px; margin: 3px 0"
+        (@dom[hstack
           [:span String(name)]
           [:span "::"]
           [FieldType name=name]]
         for name in attrs)...]
       expandable(@dom[:h4 "Constructors"]) do
         name = @dom[:span class="syntax--support syntax--function" string(T.name.name)]
-        @dom[:div css"> * {display: block}"
-          (render_method(m, name=name) for m in methods(T))...]
+        @dom[vstack (render_method(m, name=name) for m in methods(T))...]
       end
       expandable(@dom[:h4 "Instance Methods"]) do
         ms = methodswith(toUnionAll(T), supertypes=true)
         isempty(ms) && return @dom[:span "No methods for this type"]
-        @dom[:div css"> * {display: block}" map(doodle, ms)...]
+        @dom[vstack map(doodle, ms)...]
       end]
   end
 end
@@ -400,19 +405,17 @@ literal(t::Tuple) = begin
   items = (@dom[IndexedItem key=i] for i in 1:length(t))
   content = collect(interleave(items, @dom[:span css"padding: 0 6px 0 0" ',']))
   length(content) == 1 && push!(content, @dom[:span ','])
-  @dom[:span css"display: flex; flex-direction: row" [:span '('] content... [:span ')']]
+  @dom[hstack [:span '('] content... [:span ')']]
 end
 
 literal(t::NamedTuple) = begin
-  items = (@dom[:span css"display: flex; flex-direction: row"
-             string(k) '=' [DictValue key=k]]
-           for k in keys(t))
+  items = (@dom[hstack string(k) '=' [DictValue key=k]] for k in keys(t))
   content = collect(interleave(items, @dom[:span css"padding: 0 6px 0 0" ',']))
   length(content) == 1 && push!(content, @dom[:span ','])
-  @dom[:span css"display: flex; flex-direction: row" [:span '('] content... [:span ')']]
+  @dom[hstack [:span '('] content... [:span ')']]
 end
 
-body(s::Set) = @dom[:div css"> * {display: block}" (@dom[SetItem value=v] for v in s)...]
+body(s::Set) = @dom[vstack (@dom[SetItem value=v] for v in s)...]
 
 brief(nt::NamedTuple) =
   @dom[:span
@@ -420,23 +423,18 @@ brief(nt::NamedTuple) =
     [:span css"color: rgb(104, 110, 122)" "[$(length(nt))]"]]
 
 body(nt::NamedTuple) =
-  @dom[:div
-    (@dom[:div css"display: flex"
-      String(key)
-      [:span css"padding: 0 5px" "="]
-      [IndexedItem key=key]]
-    for key in keys(nt))...]
+  @dom[vstack
+    (@dom[hstack String(key) [:span css"padding: 0 5px" "="] [IndexedItem key=key]] for key in keys(nt))...]
 
 body(v::Union{Tuple,AbstractVector}) =
-  @dom[:div css"> * {display: block}" (@dom[IndexedItem key=i] for i in keys(v))...]
+  @dom[vstack (@dom[IndexedItem key=i] for i in keys(v))...]
 
 "Shows a brief view that can be toggled into a more detailed view"
 @component Expandable(state=false)
 doodle(e::Expandable, data) = begin
   isopen = e.state
   @dom[:div
-    [:div css"display: flex; flex-direction: row; align-items: center"
-          onmousedown=(_)->e.state = !isopen
+    [hstack css"align-items: center" onmousedown=(_)->e.state = !isopen
       chevron(isopen)
       haskey(e.attrs, :head) ? e.attrs[:head] : brief(data)]
     if isopen
