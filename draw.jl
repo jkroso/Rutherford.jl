@@ -458,7 +458,7 @@ color(str) = begin
   out = [@dom[:span style.color="lightgray" str[1:matches[1].offset-1]]]
   for (i, current) in enumerate(matches)
     start = current.offset+length(current.match)
-    cutoff = i == endof(matches) ? endof(str) : matches[i+1].offset-1
+    cutoff = i == lastindex(matches) ? lastindex(str) : matches[i+1].offset-1
     color = colors[parse(UInt8, current.captures[1]) - UInt8(30)]
     text = str[start:cutoff]
     push!(out, @dom[:span{style.color=color} text])
