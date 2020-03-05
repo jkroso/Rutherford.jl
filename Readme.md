@@ -38,5 +38,6 @@ And you will probably want to add some keyboard shortcuts to your `~/.atom/keyma
 ```coffee
 '.platform-darwin .item-views > atom-text-editor[data-grammar="source julia"]:not([mini])':
   'cmd-ctrl-enter': 'julia-client:eval-block'
+  'cmd-alt-ctrl-enter': 'julia-client:eval-each'
   'cmd-ctrl-backspace': 'julia-client:reset-module'
 ```

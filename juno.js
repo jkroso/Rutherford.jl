@@ -10,6 +10,13 @@ atom.commands.add(".item-views > atom-text-editor", {
       eval_block()
     })
   },
+  "julia-client:eval-each": (event) => {
+    atom.commands.dispatch(event.currentTarget, "autocomplete-plus:cancel")
+    return commands.withInk(() => {
+      connection.boot()
+      return eval_each()
+    })
+  },
   "julia-client:reset-module": () => {
     connection.boot()
     const {edpath} = runtime.evaluation._currentContext()
@@ -100,25 +107,39 @@ const results = {}
 var id = 0
 
 const eval_block = () => {
-  const {editor, mod, edpath} = runtime.evaluation._currentContext()
-  Promise.all(misc.blocks.get(editor).map(({range, line, text}) => {
-    const [[start], [end]] = range
-    const r = new runtime.evaluation.ink.Result(editor, [start, end], {type: "inline", scope: "julia"})
-    const top_node = result_container()
-    r.view.view.replaceWith(top_node)
-    r.view.view = top_node
-    runtime.evaluation.ink.highlight(editor, start, end)
-    const _id = id += 1
-    results[id] = r
-    const onDidDestroy = () => {
-      if (!(_id in results)) return
-      delete results[_id]
-      connection.client.ipc.msg("result done", _id)
-    }
-    r.onDidDestroy(onDidDestroy)
-    editor.onDidDestroy(onDidDestroy)
-    connection.client.ipc.msg("rutherford eval", {text, line: line+1, mod, path: edpath, id})
-  }))
+  const ctx = runtime.evaluation._currentContext()
+  const results = misc.blocks.get(ctx.editor).map((x)=>create_result(x, ctx))
+  return connection.client.ipc.rpc("rutherford eval", results)
+}
+
+const create_result = ({range, line, text}, {editor, mod, edpath}) => {
+  const [[start], [end]] = range
+  const r = new runtime.evaluation.ink.Result(editor, [start, end], {type: "inline", scope: "julia"})
+  const top_node = result_container()
+  r.view.view.replaceWith(top_node)
+  r.view.view = top_node
+  runtime.evaluation.ink.highlight(editor, start, end)
+  const _id = id += 1
+  results[_id] = r
+  const onDidDestroy = () => {
+    if (!(_id in results)) return
+    delete results[_id]
+    connection.client.ipc.msg("result done", _id)
+  }
+  r.onDidDestroy(onDidDestroy)
+  editor.onDidDestroy(onDidDestroy)
+  return {text, line: line+1, path: edpath, id: _id}
+}
+
+const eval_each = () => {
+  const ctx = runtime.evaluation._currentContext()
+  const cursors = misc.blocks.get(ctx.editor)
+  if (cursors.length == 0) cursors.push({range:[[0,0],[0,null]]})
+  return Promise.all(cursors.map(({range}) =>
+    connection.client.ipc.rpc("getblocks", range, ctx.edpath)
+      .then((blocks) => blocks.map((x)=>create_result(x, ctx)))
+      .then((results) => connection.client.ipc.rpc("rutherford eval", results))
+  ))
 }
 
 // creating it ourselves because ink attaches event handlers to their one

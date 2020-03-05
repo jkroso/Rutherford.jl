@@ -263,17 +263,61 @@ getmodule(path) =
 
 const inline_displays = Dict{Int32,InlineResult}()
 
-Atom.handle("rutherford eval") do data
-  @destruct {"text"=>text, "line"=>line, "path"=>path, "id"=>id} = data
-  snippet = Snippet(text, line, path, id)
-  device = InlineResult(snippet)
-  inline_displays[id] = device
-  Base.invokelatest(display_result, device, evaluate(device))
+Atom.handle("rutherford eval") do results
+  ids = Set([x["id"] for x in results])
+  for data in results
+    @destruct {"text"=>text, "line"=>line, "path"=>path, "id"=>id} = data
+    snippet = Snippet(text, line, path, id)
+    device = InlineResult(snippet)
+    inline_displays[id] = device
+    Base.invokelatest(display_result, device, evaluate(device))
+  end
   for device in values(inline_displays)
-    device.snippet.line == line && continue
+    device.snippet.id in ids && continue
     Base.invokelatest(display_result, device, evaluate(device))
   end
 end
+
+getblocks(data, path) = begin
+  @destruct [[start_row, start_col], [end_row, end_col]] = data
+  src = String(read(path))
+  lines = collect(eachline(path, keep=true))
+  if end_col == nothing
+    # full file
+    start_row = start_col = 1
+    end_row = length(lines)
+    end_col = length(lines[end])
+  else
+    # convert JS indexes to JL
+    start_row += 1
+    start_col += 1
+    end_row += 1
+    end_col += 1
+  end
+  start_i = 0
+  line = 1
+  while line < start_row
+    start_i += length(lines[line])
+    line += 1
+  end
+  start_i += start_col
+  end_i = start_i
+  while line < end_row
+    end_i += length(lines[line])
+    line += 1
+  end
+  blocks = Any[]
+  while start_i <= end_i
+    (ast, i) = Meta.parse(src, start_i)
+    line = countlines(IOBuffer(src[1:start_i])) - 1
+    text = src[start_i:i-1]
+    range = [[line, 0], [line+countlines(IOBuffer(text))-1, 0]]
+    push!(blocks, (text=strip(text), line=line, range=range))
+    start_i = i
+  end
+  blocks
+end
+Atom.handle(getblocks, "getblocks")
 
 evaluate(s::Snippet) =
   lock(Atom.evallock) do
