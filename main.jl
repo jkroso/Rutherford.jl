@@ -264,7 +264,7 @@ getmodule(path) =
 const inline_displays = Dict{Int32,InlineResult}()
 
 Atom.handle("rutherford eval") do results
-  ids = Set([x["id"] for x in results])
+  lines = Set([x["line"] for x in results])
   for data in results
     @destruct {"text"=>text, "line"=>line, "path"=>path, "id"=>id} = data
     snippet = Snippet(text, line, path, id)
@@ -273,7 +273,7 @@ Atom.handle("rutherford eval") do results
     Base.invokelatest(display_result, device, evaluate(device))
   end
   for device in values(inline_displays)
-    device.snippet.id in ids && continue
+    device.snippet.line in lines && continue
     Base.invokelatest(display_result, device, evaluate(device))
   end
 end
@@ -370,7 +370,7 @@ schedule_display(d::InlineResult) = begin
       end
       display(d, view)
     catch e
-      Base.showerror(stderr, e)
+      showerror(stderr, e)
     end
   end
   nothing
