@@ -57,8 +57,7 @@ doodle(s::AbstractString) =
   if occursin(r"\n", s)
     @dom[vstack class="syntax--string syntax--quoted syntax--triple syntax--double syntax--julia"
       [:span "\"\"\""]
-      [:span css"white-space: pre" s]
-      [:span "\"\"\""]]
+      [:span css"white-space: pre" s "\"\"\""]]
   else
     syntax(s)
   end
