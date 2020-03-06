@@ -5,9 +5,9 @@ const DOM = require(process.env.HOME + "/.kip/repos/jkroso/DOM.jl/runtime.js")
 atom.commands.add(".item-views > atom-text-editor", {
   "julia-client:eval-block": (event) => {
     atom.commands.dispatch(event.currentTarget, "autocomplete-plus:cancel")
-    commands.withInk(() => {
+    return commands.withInk(() => {
       connection.boot()
-      eval_block()
+      return eval_block()
     })
   },
   "julia-client:eval-each": (event) => {
@@ -133,10 +133,11 @@ const create_result = ({range, line, text}, {editor, mod, edpath}) => {
 
 const eval_each = () => {
   const ctx = runtime.evaluation._currentContext()
+  const src = ctx.editor.getBuffer().getText()
   const cursors = misc.blocks.get(ctx.editor)
   if (cursors.length == 0) cursors.push({range:[[0,0],[0,null]]})
   return Promise.all(cursors.map(({range}) =>
-    connection.client.ipc.rpc("getblocks", range, ctx.edpath)
+    connection.client.ipc.rpc("getblocks", range, ctx.edpath, src)
       .then((blocks) => blocks.map((x)=>create_result(x, ctx)))
       .then((results) => connection.client.ipc.rpc("rutherford eval", results))
   ))

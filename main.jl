@@ -286,10 +286,9 @@ Atom.handle("rutherford eval") do results
   end
 end
 
-getblocks(data, path) = begin
+getblocks(data, path, src) = begin
   @destruct [[start_row, start_col], [end_row, end_col]] = data
-  src = String(read(path))
-  lines = collect(eachline(path, keep=true))
+  lines = collect(eachline(IOBuffer(src), keep=true))
   if end_col == nothing
     # full file
     start_row = start_col = 1
