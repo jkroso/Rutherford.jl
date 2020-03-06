@@ -157,8 +157,32 @@ const result_container = () => {
 const loading_gear = document.createElement("span")
 loading_gear.classList.add("loading", "icon", "icon-gear")
 
+const notifications = {}
+
+connection.client.ipc.handle("test passed", ({line}) => {
+  if (line in notifications) {
+    notifications[line].dismiss()
+  }
+})
+
+connection.client.ipc.handle("test failed", ({line, path}) => {
+  const n = atom.notifications.addInfo(`Test failed in ${path}:${line}`, {
+    dismissable: true,
+    buttons: [{
+      onDidClick: () => {
+        runtime.workspace.ink.Opener.open(path, line-1)
+      },
+      text: "Goto"
+    }]
+  })
+  if (line in notifications) notifications[line].dismiss()
+  n.onDidDismiss(()=>{delete notifications[line]})
+  notifications[line] = n
+})
+
 connection.client.ipc.handle("render", ({state, dom, id}) => {
   const r = results[id]
+  if (r == undefined) return
   r.view.toolbarView.classList.remove("hide")
   var top_node = r.view.view
 

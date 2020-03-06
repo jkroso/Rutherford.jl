@@ -1,3 +1,4 @@
+@use "github.com/jkroso/Rutherford.jl" msg current_device
 @use "github.com/jkroso/Rutherford.jl/draw.jl" doodle @dom @css_str color hstack vstack
 @use "github.com/ssfrr/DeepDiffs.jl" deepdiff DeepDiff SimpleDiff
 @use "github.com/IainNZ/Humanize.jl" datasize
@@ -30,6 +31,7 @@ end
 
 doodle(r::Result) = begin
   pass, time, bytes, gctime, memallocs = r.data
+  pass ? notify_pass() : notify_fail()
   @dom[:span class.passed=pass
              css"""
              &.passed > span:first-child {color: rgb(0, 226, 0)}
@@ -49,9 +51,14 @@ doodle(c::Comparison) = begin
   a, time, bytes, gctime, memallocs = c.data
   pass = a == c.expected
   pass && return doodle(Result((true, time, bytes, gctime, memallocs)))
+  notify_fail()
   @dom[hstack "💥 " doodle(deepdiff(a, c.expected))]
 end
 
 showdiff(io, diff) = show(IOContext(io, :color=>true), diff)
 doodle(d::DeepDiff) = @dom[:span color(sprint(showdiff, d))]
 doodle(d::SimpleDiff) = @dom[:span "got " doodle(d.before) " expected " doodle(d.after)]
+
+notify_fail(d=current_device()) = msg("test failed", to_tuple(d.snippet))
+notify_pass(d=current_device()) = msg("test passed", to_tuple(d.snippet))
+to_tuple(x::T) where T = NamedTuple{fieldnames(T), Tuple{fieldtypes(T)...}}(tuple(values(x)...))
