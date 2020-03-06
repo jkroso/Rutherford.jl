@@ -1,23 +1,45 @@
-@use "github.com/jkroso/Rutherford.jl" msg current_device
+@use "github.com/jkroso/Rutherford.jl" msg current_device @dynamic!
 @use "github.com/jkroso/Rutherford.jl/draw.jl" doodle @dom @css_str color hstack vstack
 @use "github.com/ssfrr/DeepDiffs.jl" deepdiff DeepDiff SimpleDiff
 @use "github.com/IainNZ/Humanize.jl" datasize
 
-struct Result
+abstract type Test end
+
+struct Result <: Test
   data::Tuple
 end
 
-struct Comparison
+struct Comparison <: Test
   data::Tuple
   expected
 end
 
+struct TestSet <: Test
+  name::String
+  tests::Vector{Test}
+end
+
+const current_testset = Ref{Union{Nothing,TestSet}}(nothing)
+
 macro test(x)
-  if Meta.isexpr(x, :call, 3) && x.args[1] == :(==)
+  r = if Meta.isexpr(x, :call, 3) && x.args[1] == :(==)
     :(Comparison(@timed($(esc(x.args[2]))), $(esc(x.args[3]))))
   else
     :(Result(@timed $(esc(x))))
   end
+  :(handle($r))
+end
+
+testset(fn, name) = begin
+  ts = handle(TestSet(name, []))
+  @dynamic! let current_testset = ts; fn() end
+  ts
+end
+
+handle(t::Test) = begin
+  ts = current_testset[]
+  isnothing(ts) || push!(ts.tests, t)
+  t
 end
 
 @eval macro $(:catch)(expr)
@@ -29,8 +51,9 @@ end
   end
 end
 
-doodle(r::Result) = begin
-  pass, time, bytes, gctime, memallocs = r.data
+doodle(r::Test) = begin
+  time, bytes, gctime, mallocs = data(r)
+  pass = ispass(r)
   pass ? notify_pass() : notify_fail()
   @dom[:span class.passed=pass
              css"""
@@ -41,19 +64,26 @@ doodle(r::Result) = begin
                > span {font-size: 0.9em; opacity: 0.8}
              padding: 1px
              """
-    [:span pass ? "✓" : "✗"]
-    [:span round(Int, 1000time) [:span "ms "]
-           string(memallocs.poolalloc) "mallocs "
-           replace(datasize(bytes), ' '=>"")]]
+    [:span pass ? pass_icon(r) : fail_icon(r)]
+    [:span round(Int, 1000time) [:span "ms"] " $(mallocs)mallocs " replace(datasize(bytes), ' '=>"")]]
 end
 
 doodle(c::Comparison) = begin
   a, time, bytes, gctime, memallocs = c.data
-  pass = a == c.expected
-  pass && return doodle(Result((true, time, bytes, gctime, memallocs)))
+  ispass(c) && return doodle(Result((true, time, bytes, gctime, memallocs)))
   notify_fail()
-  @dom[hstack "💥 " doodle(deepdiff(a, c.expected))]
+  @dom[hstack "💥" doodle(deepdiff(a, c.expected))]
 end
+
+data(t::Test) = [t.data[2:4]..., t.data[5].poolalloc]
+data(t::TestSet) = map(+, map(data, t.tests)...)
+ispass(t::Result) = t.data[1]
+ispass(t::Comparison) = t.data[1] == t.expected
+ispass(t::TestSet) = all(ispass, t.tests)
+fail_icon(::Test) = "✗"
+pass_icon(::Test) = "✓"
+pass_icon(::TestSet) = "👍"
+fail_icon(::TestSet) = "👎"
 
 showdiff(io, diff) = show(IOContext(io, :color=>true), diff)
 doodle(d::DeepDiff) = @dom[:span color(sprint(showdiff, d))]
