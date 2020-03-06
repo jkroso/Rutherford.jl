@@ -7,7 +7,8 @@
     "Destructure.jl" @destruct
     "Promises.jl" @defer Deferred need pending Promise
     "DynamicVar.jl" @dynamic!]
-  "JunoLab/Atom.jl" => Atom]
+  "JunoLab/Atom.jl" => Atom
+  "JunoLab/Juno.jl" => Juno]
 @use "./transactions" apply Change Assoc Dissoc Delete
 import Sockets: listenany, accept, TCPSocket
 
@@ -264,17 +265,24 @@ getmodule(path) =
 const inline_displays = Dict{Int32,InlineResult}()
 
 Atom.handle("rutherford eval") do results
-  lines = Set([x["line"] for x in results])
-  for data in results
-    @destruct {"text"=>text, "line"=>line, "path"=>path, "id"=>id} = data
-    snippet = Snippet(text, line, path, id)
-    device = InlineResult(snippet)
-    inline_displays[id] = device
-    Base.invokelatest(display_result, device, evaluate(device))
-  end
-  for device in values(inline_displays)
-    device.snippet.line in lines && continue
-    Base.invokelatest(display_result, device, evaluate(device))
+  Atom.with_logger(Atom.JunoProgressLogger()) do
+    lines = Set([x["line"] for x in results])
+    total = length(results) + count(d->!(d.snippet.line in lines), values(inline_displays))
+    Juno.progress(name="eval") do progress_id
+      for (i, data) in enumerate(results)
+        @destruct {"text"=>text, "line"=>line, "path"=>path, "id"=>id} = data
+        snippet = Snippet(text, line, path, id)
+        device = InlineResult(snippet)
+        inline_displays[id] = device
+        Base.invokelatest(display_result, device, evaluate(device))
+        @info "eval" progress=i/total _id=progress_id
+      end
+      for (i, device) in enumerate(values(inline_displays))
+        device.snippet.line in lines && continue
+        Base.invokelatest(display_result, device, evaluate(device))
+        @info "eval" progress=+(i,length(results))/total _id=progress_id
+      end
+    end
   end
 end
 
