@@ -89,6 +89,5 @@ showdiff(io, diff) = show(IOContext(io, :color=>true), diff)
 doodle(d::DeepDiff) = @dom[:span color(sprint(showdiff, d))]
 doodle(d::SimpleDiff) = @dom[:span "got " doodle(d.before) " expected " doodle(d.after)]
 
-notify_fail(d=current_device()) = msg("test failed", to_tuple(d.snippet))
-notify_pass(d=current_device()) = msg("test passed", to_tuple(d.snippet))
-to_tuple(x::T) where T = NamedTuple{fieldnames(T), Tuple{fieldtypes(T)...}}(tuple(values(x)...))
+notify_fail(d=current_device()) = msg("test failed", convert(NamedTuple, d.snippet))
+notify_pass(d=current_device()) = msg("test passed", convert(NamedTuple, d.snippet))
