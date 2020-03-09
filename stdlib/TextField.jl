@@ -1,5 +1,5 @@
 @use "github.com/jkroso/Destructure.jl" @destruct
-@use ".." @dom @css_str @component doodle emit
+@use ".." @dom @css_str @component doodle emit choose_context draw InlineResult EditMode
 @use "../transactions.jl" Swap
 
 @component TextField(state=0)
@@ -36,5 +36,13 @@ doodle(t::TextField, value) = begin
       Swap(str)
     end
   end
-  @dom[:div{onkeydown, attrs...} isempty(value) ? placeholder : value]
+  @dom[:span{onkeydown, attrs...} isempty(value) ? placeholder : value]
 end
+
+choose_context(d::InlineResult, ::String) = EditMode(d)
+
+draw(ctx::EditMode, str::String) =
+  @dom[:span class="syntax--string syntax--quoted syntax--double"
+    [:span '"']
+    [TextField focus=true]
+    [:span '"']]

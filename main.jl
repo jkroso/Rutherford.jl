@@ -5,7 +5,8 @@
     "Prospects.jl" Field assoc push @struct
     "Destructure.jl" @destruct
     "Promises.jl" @defer Deferred need pending Promise
-    "DynamicVar.jl" @dynamic!]
+    "DynamicVar.jl" @dynamic!
+    "Unparse.jl" serialize]
   "JunoLab/Atom.jl" => Atom
   "JunoLab/Juno.jl" => Juno]
 @use "./transactions" apply Change Assoc Dissoc Delete
@@ -144,6 +145,8 @@ on them you can precisly alter the way Components are drawn and how they get/set
 the data they depend upon
 """
 abstract type AbstractContext end
+abstract type TopLevelContext <: AbstractContext end
+abstract type SubContext <: AbstractContext end
 
 "Provides access to the current rendering context"
 const context = Ref{Union{Nothing,AbstractContext}}(nothing)
@@ -151,7 +154,7 @@ const context = Ref{Union{Nothing,AbstractContext}}(nothing)
 """
 A Context is a Component with a linked list of all it's parents
 """
-struct Context{Node<:Component,Parent<:AbstractContext} <: AbstractContext
+struct Context{Node<:Component,Parent<:AbstractContext} <: SubContext
   node::Node
   parent::Parent
 end
@@ -228,7 +231,15 @@ const event_parsers = Dict{String,Function}(
 
 Atom.handle("event") do id, data
   event = event_parsers[data["type"]](data)
-  emit(inline_displays[id], event)
+  res = Atom.@errs emit(inline_displays[id], event)
+  if res isa Atom.EvalError
+    try
+      Base.showerror(IOContext(stderr, :limit => true), res)
+    catch err
+      show(stderr, err)
+    end
+  end
+  res
 end
 
 Atom.handle("reset module") do file
@@ -249,19 +260,10 @@ mutable struct InlineResult
   InlineResult(s) = new(s, :ok, done_task, nothing)
 end
 
-@struct JunoResult(device::InlineResult) <: AbstractContext
-
-msg(::InlineResult, data) = msg(data[:command], data)
-data(jr::JunoResult) = jr.device.data
-
-"Get the Module associated with the current file"
-getmodule(path) =
-  get!(Kip.modules, path) do
-    @eval Main module $(Symbol(:⭒, Kip.pkgname(path)))
-      using InteractiveUtils
-      using Kip
-    end
-  end
+# I'm sorry Larry Tesler
+@struct ViewMode(device::InlineResult) <: TopLevelContext
+@struct EditMode(device::InlineResult) <: TopLevelContext
+data(c::TopLevelContext) = c.device.data
 
 const inline_displays = Dict{Int32,InlineResult}()
 
@@ -330,7 +332,16 @@ Atom.handle(getblocks, "getblocks")
 evaluate(s::Snippet) =
   lock(Atom.evallock) do
     Atom.withpath(s.path) do
-      Atom.@errs include_string(getmodule(s.path), s.text, s.path, s.line)
+      m = Kip.get_module(s.path, interactive=true)
+      res = Atom.@errs include_string(m, s.text, s.path, s.line)
+      if res isa Atom.EvalError
+        try
+          Base.showerror(IOContext(stderr, :limit => true), res)
+        catch err
+          show(stderr, err)
+        end
+      end
+      res
     end
   end
 
@@ -364,7 +375,7 @@ Atom.handle("result done") do id
 end
 
 schedule_display(ctx::Context) = schedule_display(ctx.parent)
-schedule_display(jr::JunoResult) = schedule_display(jr.device)
+schedule_display(jr::TopLevelContext) = schedule_display(jr.device)
 schedule_display(d::InlineResult) = begin
   istaskdone(d.display_task) || return
   d.display_task = @async begin
@@ -374,15 +385,17 @@ schedule_display(d::InlineResult) = begin
       view = if Atom.ends_with_semicolon(d.snippet.text) && d.state == :ok
         @dom[:span class="icon icon-check"]
       else
-        incontext(draw, JunoResult(d))
+        incontext(draw, choose_context(d))
       end
       display(d, view)
     catch e
-      showerror(stderr, e)
+      show(stderr, e)
     end
   end
   nothing
 end
+
+choose_context(d::InlineResult, data=d.data) = ViewMode(d)
 
 """
 Serves as a fallback for `draw()`. If you are implmenting a new datatype or a custom UI
@@ -398,7 +411,7 @@ function draw end
 
 draw(ctx::AbstractContext) = draw(ctx, data(ctx))
 draw(ctx::AbstractContext, data) = doodle(component(ctx), data)
-component(::JunoResult) = nothing
+component(::TopLevelContext) = nothing
 component(ctx::Context) = ctx.node
 doodle(::Union{Nothing,Component}, data) = doodle(data)
 
@@ -441,14 +454,30 @@ findpath(parent, target, path=UInt8[]) = begin
 end
 
 transact(change::Change) = transact(change, context[])
-transact(change::Change, ctx::JunoResult) = display_result(ctx.device, apply(change, data(ctx)))
+transact(change::Change, ctx::TopLevelContext) = display_result(ctx.device, apply(change, data(ctx)))
+
+transact(change::Change, ctx::EditMode) = begin
+  @destruct {path, line, id} = ctx.device.snippet
+  d = apply(change, data(ctx))
+  src = serialize(d, width=100, mod=Kip.get_module(path))
+  msg("edit", src, line, id)
+  display_result(ctx.device, d)
+end
+
 transact(change::Change, ctx::Context) = transact(up(ctx, change), up(ctx))
 
-up(ctx::Context, c::Change) = Assoc(path(ctx), c)
+up(ctx::Context, c::Change) = begin
+  p = path(ctx)
+  isnothing(p) ? c : Assoc(p, c)
+end
 up(ctx::Context, c::Delete) = Dissoc(path(ctx))
 up(ctx::Context) = ctx.parent
 
 current_device(ctx=context[]) = top(ctx).device
 current_device(::Nothing) = nothing
-top(ctx::JunoResult) = ctx
+top(ctx::TopLevelContext) = ctx
 top(ctx::Context) = top(ctx.parent)
+
+@use "./draw.jl"
+@use "./stdlib/TextField.jl" TextField
+@use "./stdlib/Stack.jl" VStack StackItem

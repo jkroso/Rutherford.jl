@@ -271,3 +271,12 @@ connection.client.ipc.handle("open", ({file, line}) => {
 connection.client.ipc.handle("AsyncNode", ({id, value}) => {
   document.getElementById(String(id)).replaceWith(DOM.create(value))
 })
+
+connection.client.ipc.handle("edit", (src, line, id) => {
+  const {editor} = runtime.evaluation._currentContext()
+  const result = results[id]
+  result.text = src // prevent invalidation
+  const marker = result.marker
+  const range = marker.getBufferRange()
+  editor.setTextInBufferRange(range, src)
+})
