@@ -4,8 +4,7 @@
 # This enables you to generate complex content without locking up the UI
 # from further interactions
 #
-@use "github.com/jkroso/Rutherford.jl" doodle @dom @css_str [
-  "stdlib/TextField.jl" TextField]
+@use "github.com/jkroso/Rutherford.jl" doodle @dom @css_str ["stdlib/TextField.jl" TextField]
 @use "github.com/jkroso/Promises.jl" @thread
 
 struct AppState

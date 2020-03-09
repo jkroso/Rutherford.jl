@@ -65,7 +65,7 @@ doodle(r::Test) = begin
              padding: 1px
              """
     [:span pass ? pass_icon(r) : fail_icon(r)]
-    [:span round(Int, 1000time) [:span "ms"] " $(mallocs)mallocs " replace(datasize(bytes), ' '=>"")]]
+    [:span round(Int, 1000time) [:span "ms"] " $(round(Int, mallocs))mallocs " replace(datasize(bytes), ' '=>"")]]
 end
 
 doodle(c::Comparison) = begin

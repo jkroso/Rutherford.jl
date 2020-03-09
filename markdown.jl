@@ -1,7 +1,7 @@
 @use "github.com" [
   "JunoLab/Atom.jl" => Atom
   "jkroso" [
-    "DOM.jl" => DOM @dom @css_str ["html.jl";]
+    "DOM.jl" => DOM @dom @css_str ["html.jl"]
     "Prospects.jl" flat]]
 import Markdown
 

@@ -1,8 +1,7 @@
 @use "github.com" [
   "MikeInnes/MacroTools.jl" => MacroTools @match
   "jkroso" [
-    "DOM.jl" => DOM Node Container Primitive HTML @dom @css_str add_attr [
-      "Events.jl" => Events]
+    "DOM.jl" => DOM Node Container Primitive @dom @css_str ["Events.jl" => Events]
     "Prospects.jl" Field assoc push @struct
     "Destructure.jl" @destruct
     "Promises.jl" @defer Deferred need pending Promise
@@ -10,12 +9,12 @@
   "JunoLab/Atom.jl" => Atom
   "JunoLab/Juno.jl" => Juno]
 @use "./transactions" apply Change Assoc Dissoc Delete
-import Sockets: listenany, accept, TCPSocket
 
 # Hacks to get completion working with Kip modules
 const complete = Atom.handlers["completions"]
 Atom.handle("completions") do data
-  complete(assoc(data, "mod", getmodule(data["path"])))
+  mod = Kip.get_module(data["path"], interactive=true)
+  complete(assoc(data, "mod", mod))
 end
 Atom.getmodule(m::Module) = m
 Atom.getmodule(s::AbstractString) = begin
@@ -70,16 +69,15 @@ invoke_handler(f::Function, e) = begin
 end
 
 Base.convert(::Type{Node}, p::Promise) = async(p, @dom[:span "Loading..."])
+handle_async_error(e, _, __) = Base.showerror(stderr, e)
 async(p::Promise, pending::Node; onerror=handle_async_error) = begin
   device = current_device()
   n = AsyncNode(true, pending, @async begin
     view = try need(p) catch e onerror(e, device, n) end
-    n.iscurrent && msg(device, command="AsyncNode", id=objectid(n), value=view)
+    n.iscurrent && msg("AsyncNode", id=objectid(n), value=view)
     view
   end)
 end
-
-handle_async_error(e, _, __) = Base.showerror(stderr, e)
 
 mutable struct AsyncNode <: Node
   iscurrent::Bool
@@ -102,9 +100,9 @@ DOM.diff(a::AsyncNode, b::AsyncNode) = begin
 end
 
 """
-A UI chunk that has some private state associated with it. Component subtypes should
-be created with the `@component` macro. e.g `@component SubtypeName`. Because they need
-to have certain fields in a certain order
+A UI chunk that might have some private state associated with it. Component subtypes should
+be created with the `@component` macro. e.g `@component SubtypeName`. Because they need to
+have certain fields in a certain order
 
 All Components should implement `doodle(<:Component)`
 """
@@ -191,7 +189,10 @@ function looks at the `:key` attribute of the current component.
 path(ctx::Context) = path(ctx.node)
 path(c::Component) = get(c.attrs, :key, nothing)
 
-add_attr(c::Component, key::Symbol, value::Any) = (c.attrs = add_attr(c.attrs, key, value); c)
+DOM.add_attr(c::Component, key::Symbol, value::Any) = begin
+  c.attrs = DOM.add_attr(c.attrs, key, value)
+  c
+end
 
 DOM.diff(a::T, b::T) where T<:Component = begin
   setfield!(b, :state, a.state)
@@ -232,7 +233,7 @@ end
 
 Atom.handle("reset module") do file
   delete!(Kip.modules, file)
-  getmodule(file)
+  Kip.get_module(file, interactive=true)
   nothing
 end
 
@@ -264,12 +265,12 @@ getmodule(path) =
 
 const inline_displays = Dict{Int32,InlineResult}()
 
-Atom.handle("rutherford eval") do results
+Atom.handle("rutherford eval") do blocks
   Atom.with_logger(Atom.JunoProgressLogger()) do
-    lines = Set([x["line"] for x in results])
-    total = length(results) + count(d->!(d.snippet.line in lines), values(inline_displays))
+    lines = Set([x["line"] for x in blocks])
+    total = length(blocks) + count(d->!(d.snippet.line in lines), values(inline_displays))
     Juno.progress(name="eval") do progress_id
-      for (i, data) in enumerate(results)
+      for (i, data) in enumerate(blocks)
         @destruct {"text"=>text, "line"=>line, "path"=>path, "id"=>id} = data
         snippet = Snippet(text, line, path, id)
         device = InlineResult(snippet)
@@ -280,7 +281,7 @@ Atom.handle("rutherford eval") do results
       for (i, device) in enumerate(values(inline_displays))
         device.snippet.line in lines && continue
         Base.invokelatest(display_result, device, evaluate(device))
-        @info "eval" progress=+(i,length(results))/total _id=progress_id
+        @info "re-eval" progress=+(i,length(blocks))/total _id=progress_id
       end
     end
   end
@@ -430,10 +431,11 @@ emit(name::Symbol, value) = begin
   emit(device, e)
 end
 
+findpath(parent::DOM.Text, target, path) = nothing
 findpath(parent, target, path=UInt8[]) = begin
   parent === target && return path
   for (i,child) in enumerate(parent.children)
-    p = findpath(child, target)
+    p = findpath(child, target, path)
     isnothing(p) || return pushfirst!(p, i)
   end
 end
