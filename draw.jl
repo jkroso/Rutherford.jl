@@ -1,7 +1,9 @@
 @use "github.com" [
   "MikeInnes/MacroTools.jl" rmlines @capture
   "jkroso" [
-    "DOM.jl" => DOM @dom @css_str ["html.jl"]
+    "DOM.jl" => DOM @dom @css_str [
+      "ansi.jl" ansi
+      "html.jl"]
     "Prospects.jl" assoc interleave
     "Destructure.jl" @destruct
     "Unparse.jl" serialize
@@ -446,44 +448,10 @@ expandable(thunk, head) = @dom[Expandable thunk=thunk head=head]
 
 doodle(e::Atom.EvalError) = begin
   trace = Atom.cliptrace(Atom.errtrace(e))
-  head = @dom[:strong class="error-description" color(sprint(showerror, e.err))]
+  head = @dom[:strong class="error-description" ansi(sprint(showerror, e.err))]
   isempty(trace) && return head
   @dom[:div head doodle(trace)]
 end
-
-"Handle ANSI color sequences"
-color(str) = begin
-  matches = eachmatch(r"\e\[(\d{2})m", str)|>collect
-  isempty(matches) && return @dom[:span str]
-  out = [@dom[:span style.color="lightgray" str[1:matches[1].offset-1]]]
-  for (i, current) in enumerate(matches)
-    start = current.offset+length(current.match)
-    cutoff = i == lastindex(matches) ? lastindex(str) : matches[i+1].offset-1
-    color = colors[parse(UInt8, current.captures[1]) - UInt8(30)]
-    text = str[start:cutoff]
-    push!(out, @dom[:span{style.color=color} text])
-  end
-  @dom[:p out...]
-end
-
-const colors = Dict{UInt8,String}(
-  0 => "black",
-  1 => "red",
-  2 => "green",
-  3 => "yellow",
-  4 => "blue",
-  5 => "magenta",
-  6 => "cyan",
-  7 => "white",
-  9 => "lightgray",
-  60 => "lightblack",
-  61 => "#f96666",
-  62 => "lightgreen",
-  63 => "lightyellow",
-  64 => "lightblue",
-  65 => "lightmagenta",
-  66 => "lightcyan",
-  67 => "lightwhite")
 
 doodle(e::Expr) = begin
   html = Atom.@rpc highlight((src=serialize(e), grammer="source.julia", block=true))
