@@ -283,3 +283,5 @@ connection.client.ipc.handle("highlight", ({src, grammer, block}) => {
   grammar = atom.grammars.grammarForScopeName(grammer)
   return Highlighter.highlight(src, grammar, {scopePrefix: 'syntax--', block})
 })
+
+connection.client.ipc.handle("config", (key) => atom.config.get(key))

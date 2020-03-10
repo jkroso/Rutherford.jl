@@ -452,17 +452,16 @@ doodle(e::Atom.EvalError) = begin
   isempty(trace) && return head
   @dom[:div head doodle(trace)]
 end
-
 doodle(e::Expr) = begin
   html = Atom.@rpc highlight((src=serialize(e), grammer="source.julia", block=true))
+  font = Atom.@rpc config("editor.fontFamily")
   dom = parse(MIME("text/html"), html)
-  # TODO: get settings from atom
+  dom.attrs[:style] = Dict("fontFamily" => font)
   dom.attrs[:class] = Set([css"""
                            display: flex
                            flex-direction: column
                            background: none
                            border-radius: 5px
-                           font: 1em SourceCodePro-light
                            padding: 0.3em
                            margin: 0
                            """])
