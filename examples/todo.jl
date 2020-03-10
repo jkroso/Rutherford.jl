@@ -15,19 +15,19 @@ draw(::@Context[StackItem VStack], item) =
             display: flex
             align-items: center
             padding: 10px
-            border-top: 1px solid rgb(180,180,180)
+            border-top: 1px solid lightgrey
             &:first-child {border-top: none}
             input {margin: 10px}
             span {flex-grow: 1}
             &.done
               text-decoration: line-through
-              color: rgb(180,180,180)
+              color: lightgrey
             button
               border: none
               background: none
               font-size: 1.5em
               font-weight: lighter
-              color: rgb(180,180,180)
+              color: lightgrey
               outline: none
               &:hover {color: rgb(30,30,30)}
             """
@@ -38,17 +38,13 @@ draw(::@Context[StackItem VStack], item) =
     [:button "×" onclick=Delete()]]
 
 doodle(::AppState) =
-  @dom[:div css"""
-            width: 500px
-            margin: 10px auto
-            font-family: monospace
-            """
+  @dom[:div css"width: 500px; margin: 10px auto; font-family: monospace"
     [TextField css"""
-      width: 100%
-      font: 2em/1.8em monospace
-      padding: 0 .8em
+      display: flex
+      font-size: 2em
+      padding: 0.2em .6em
       border-radius: 3px
-      border: 1px solid rgb(180,180,180)
+      border: 1px solid lightgrey
       """
       focus=true
       placeholder="What needs doing?"
@@ -56,11 +52,7 @@ doodle(::AppState) =
       onsubmit=txt-> if !isempty(txt)
         Merge(input=Swap(""), items=Unshift((title=txt, done=false)))
       end]
-    [VStack key=:items css"""
-                       border-radius: 3px
-                       border: 1px solid rgb(180,180,180)
-                       margin-top: 10px
-                       """]]
+    [VStack key=:items css"border-radius: 3px; border: 1px solid lightgrey; margin-top: 10px"]]
 
 AppState("", [(title="GST", done=false),
               (title="Order pop-riveter", done=false),

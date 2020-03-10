@@ -401,34 +401,29 @@ choose_context(d::InlineResult, data=d.data) = ViewMode(d)
 Serves as a fallback for `draw()`. If you are implmenting a new datatype or a custom UI
 Component for an existing data type then this is the method you should implement
 """
-function doodle end
+doodle(::Union{Nothing,Component}, data) = doodle(data)
 
 """
 If you want to customise the way a datatype looks in a certain context then this is the
 method you need to specialise
 """
-function draw end
-
 draw(ctx::AbstractContext) = draw(ctx, data(ctx))
 draw(ctx::AbstractContext, data) = doodle(component(ctx), data)
 component(::TopLevelContext) = nothing
 component(ctx::Context) = ctx.node
-doodle(::Union{Nothing,Component}, data) = doodle(data)
 
-const depth = Ref{Int}(0)
+"used to tell emit() to stop recursion"
 const stop = Ref{Bool}(false)
 
-emit(d::InlineResult, e) = @dynamic! let depth=0, stop=false; emit(d.view, e) end
-emit(d::InlineResult, e::Events.Key) = @dynamic! let depth=0, stop=false
-  isnothing(d.focused_node) || emit(d.focused_node, e)
-end
-emit(d::Component, e) = @dynamic! let context = d.context; emit(d.view, e) end
-emit(d::Container, e) = begin
-  ndepth = depth[] + 1
+emit(d::InlineResult, e) = @dynamic! let stop=false; emit(d, e, 1) end
+emit(d::InlineResult, e, i) = emit(d.view, e, i)
+emit(d::InlineResult, e::Events.Key, i) = isnothing(d.focused_node) || emit(d.focused_node, e, i)
+emit(d::Component, e, i) = @dynamic! let context = d.context; emit(d.view, e, i) end
+emit(d::Container, e, i) = begin
   path = Events.path(e)
-  if length(path) >= ndepth
-    child = d.children[path[ndepth]]
-    @dynamic! let depth = ndepth; emit(child, e) end
+  if length(path) >= i
+    child = d.children[path[i]]
+    emit(child, e, i + 1)
   end
   stop[] && return
   fn = get(d.attrs, Events.name(e), nothing)
@@ -454,8 +449,8 @@ findpath(parent, target, path=UInt8[]) = begin
 end
 
 transact(change::Change) = transact(change, context[])
+transact(change::Change, ctx::Context) = transact(up(ctx, change), up(ctx))
 transact(change::Change, ctx::TopLevelContext) = display_result(ctx.device, apply(change, data(ctx)))
-
 transact(change::Change, ctx::EditMode) = begin
   @destruct {path, line, id} = ctx.device.snippet
   d = apply(change, data(ctx))
@@ -463,8 +458,6 @@ transact(change::Change, ctx::EditMode) = begin
   msg("edit", src, line, id)
   display_result(ctx.device, d)
 end
-
-transact(change::Change, ctx::Context) = transact(up(ctx, change), up(ctx))
 
 up(ctx::Context, c::Change) = begin
   p = path(ctx)
