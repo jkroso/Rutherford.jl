@@ -1,5 +1,6 @@
 const commands = require(process.env.HOME + "/.atom/packages/julia-client/lib/package/commands")
 const {runtime,misc,connection} = require(process.env.HOME + "/.atom/packages/julia-client")
+const Highlighter = require(process.env.HOME + "/.atom/packages/julia-client/lib/ui/highlighter.coffee")
 const DOM = require(process.env.HOME + "/.kip/repos/jkroso/DOM.jl/runtime.js")
 
 atom.commands.add(".item-views > atom-text-editor", {
@@ -69,9 +70,6 @@ const mouse_hover_event = (e, top_node) => ({
 })
 
 const dom_path = (dom, top_node) => top_node.contains(dom) ? DOM.dom_path(dom, top_node) : []
-
-// The timeout used in DOM is too fast for Atom so we overwrite it
-DOM.attrSetters.isfocused = (el, value) => value && setTimeout(() => el.focus(), 50)
 
 const event_converters = {
   click: mouse_button_event,
@@ -279,4 +277,9 @@ connection.client.ipc.handle("edit", (src, line, id) => {
   const marker = result.marker
   const range = marker.getBufferRange()
   editor.setTextInBufferRange(range, src)
+})
+
+connection.client.ipc.handle("highlight", ({src, grammer, block}) => {
+  grammar = atom.grammars.grammarForScopeName(grammer)
+  return Highlighter.highlight(src, grammar, {scopePrefix: 'syntax--', block})
 })

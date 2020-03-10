@@ -16,28 +16,19 @@ renderMD(::Markdown.HorizontalRule) = @dom[:hr]
 renderMD(h::Markdown.Header{l}) where l =
   DOM.Container{Symbol(:h, l)}(DOM.Attrs(), map(renderMDinline, flat(h.text)))
 
-const lexer_map = Dict("jldoctest" => "julia")
-const lexers = let array = String[]
-  for line in eachline(IOBuffer(read(`pygmentize -L lexers`)))
-    startswith(line, '*') || continue
-    push!(array, split(line[3:end-1], ", ")...)
-  end
-  Set{String}(array)
-end
-
 renderMD(c::Markdown.Code) = begin
-  language = isempty(c.language) ? "julia" : c.language
-  lexer = language in lexers ? language : get(lexer_map, language, "text")
-  proc = open(`pygmentize -f html -O "noclasses" -l $(lexer)`, "r+")
-  write(proc.in, c.code)
-  close(proc.in)
-  html = String(read(proc.out))
-  @dom[:code block=true
-             css"""
-             padding: 0
-             > .highlight {overflow: scroll; border-radius: 5px; border: 1px solid #e8e8e8}; white-space: pre
-             """
-             parse(MIME("text/html"), html)]
+  language = isempty(c.language) ? "text.plain" : "source.$(c.language)"
+  html = Atom.@rpc highlight((src=c.code, grammer=language, block=true))
+  dom = parse(MIME("text/html"), html)
+  dom.attrs[:class] = Set([css"""
+                           display: flex
+                           flex-direction: column
+                           border-radius: 5px
+                           font: 1em SourceCodePro-light
+                           padding: 0.6em
+                           margin: 0
+                           """])
+  dom
 end
 
 renderMD(f::Markdown.Footnote) =
