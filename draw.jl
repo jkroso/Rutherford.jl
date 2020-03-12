@@ -11,7 +11,7 @@
   "JunoLab" [
     "CodeTools.jl" => CodeTools
     "Atom.jl" => Atom]]
-@use "." msg @component Context draw doodle path data stop
+@use "." @component Context draw doodle path data stop
 @use "./markdown" renderMD
 using InteractiveUtils
 import Markdown
@@ -272,13 +272,11 @@ stacklink(path, line) = begin
   path == "./missing" && return fade("./missing")
   name, path = expandpath(path)
   onmousedown(e) = begin
-    open(path, line)
+    Atom.@msg openFile(path, line-1)
     stop[] = true
   end
   @dom[:a{onmousedown} Atom.appendline(name, line)]
 end
-
-open(file, line) = msg("open", (file=file, line=line-1))
 
 brief(f::StackTraces.StackFrame) = begin
   f.linfo isa Nothing && return @dom[:span string(f.func)]
@@ -432,7 +430,7 @@ body(v::Union{Tuple,AbstractVector}) =
 
 "Shows a brief view that can be toggled into a more detailed view"
 @component Expandable(state=false)
-doodle(e::Expandable, data) = begin
+draw(e::Expandable, data) = begin
   isopen = e.state
   @dom[:div
     [hstack css"align-items: center" onmousedown=(_)->e.state = !isopen
@@ -452,6 +450,7 @@ doodle(e::Atom.EvalError) = begin
   isempty(trace) && return head
   @dom[:div head doodle(trace)]
 end
+
 doodle(e::Expr) = begin
   html = Atom.@rpc highlight((src=serialize(e), grammer="source.julia", block=true))
   font = Atom.@rpc config("editor.fontFamily")

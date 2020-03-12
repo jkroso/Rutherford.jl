@@ -262,10 +262,6 @@ connection.client.ipc.handle("patch", ({id, patch, state}) => {
   DOM.patch(patch, top_node.lastChild)
 })
 
-connection.client.ipc.handle("open", ({file, line}) => {
-  runtime.workspace.ink.Opener.open(file, line)
-})
-
 connection.client.ipc.handle("AsyncNode", ({id, value}) => {
   document.getElementById(String(id)).replaceWith(DOM.create(value))
 })
