@@ -56,11 +56,11 @@ Events.path(e::CustomEvent) = e.path
 Event handlers just store the context along with a user defined handler so when the
 event occurs it can be handled in the same context the handler assigned in
 """
-@struct EventHandler(handler, context)
-DOM.wrap_handler(::Symbol, handler) = EventHandler(handler, context[])
+@struct EventHandler(handler, context, intent)
+DOM.wrap_handler(::Symbol, handler) = EventHandler(handler, context[], intent[])
 DOM.jsonable(::EventHandler) = false
 
-(h::EventHandler)(e) = @dynamic! let context=h.context; invoke_handler(h.handler, e) end
+(h::EventHandler)(e) = @dynamic! let context=h.context, intent=h.intent; invoke_handler(h.handler, e) end
 invoke_handler(c::Change, e) = (transact(c); nothing)
 invoke_handler(f::Function, e::CustomEvent) = invoke_handler(f, e.value)
 invoke_handler(f::Function, e) = begin
@@ -122,39 +122,31 @@ macro component(expr)
       content::Vector{DOM.Node}
       state::Any
       ctx::AbstractContext
+      intent::Intent
       view::Deferred{DOM.Node}
     end
     function $name(attrs, content)
-      c = $name(attrs, content, $(esc(state)), context[],
-                @defer incontext(draw, c.context)::DOM.Node)
+      c = $name(attrs, content, $(esc(state)), context[], intent[],
+                @defer(@dynamic!(let context = c.context, intent = c.intent
+                  Base.invokelatest(draw, data(context[]))
+                end)::DOM.Node))
     end
   end
 end
 
-incontext(fn, value) = begin
-  old = context[]
-  context[] = value
-  r = Base.invokelatest(fn, value)
-  context[] = old
-  r
-end
-
 """
-Contexts provide infomation about what's being rendered. By specializing methods
-on them you can precisly alter the way Components are drawn and how they get/set
-the data they depend upon
+Contexts provide infomation about the location in the UI where the current thing
+been drawn will be shown
 """
 abstract type AbstractContext end
-abstract type TopLevelContext <: AbstractContext end
-abstract type SubContext <: AbstractContext end
 
 "Provides access to the current rendering context"
-const context = Ref{Union{Nothing,AbstractContext}}(nothing)
+const context = Ref{Union{AbstractContext,Nothing}}(nothing)
 
 """
 A Context is a Component with a linked list of all it's parents
 """
-struct Context{Node<:Component,Parent<:AbstractContext} <: SubContext
+struct Context{Node<:Component,Parent<:AbstractContext} <: AbstractContext
   node::Node
   parent::Parent
 end
@@ -260,10 +252,16 @@ mutable struct InlineResult
   InlineResult(s) = new(s, :ok, done_task, nothing)
 end
 
-# I'm sorry Larry Tesler
-@struct ViewMode(device::InlineResult) <: TopLevelContext
-@struct EditMode(device::InlineResult) <: TopLevelContext
+"Intents describe what the user is trying to do with the data"
+abstract type Intent end
+@struct View() <: Intent
+@struct Edit() <: Intent
+
+@struct TopLevelContext(device::InlineResult) <: AbstractContext
 data(c::TopLevelContext) = c.device.data
+
+"Provides access to the current rendering Intent"
+const intent = Ref{Union{Intent, Nothing}}(nothing)
 
 const inline_displays = Dict{Int32,InlineResult}()
 
@@ -283,7 +281,7 @@ Atom.handle("rutherford eval") do blocks
       for (i, device) in enumerate(values(inline_displays))
         device.snippet.line in lines && continue
         Base.invokelatest(display_result, device, evaluate(device))
-        @info "re-eval" progress=+(i,length(blocks))/total _id=progress_id
+        @info "eval" progress=+(i,length(blocks))/total _id=progress_id
       end
     end
   end
@@ -385,7 +383,9 @@ schedule_display(d::InlineResult) = begin
       view = if Atom.ends_with_semicolon(d.snippet.text) && d.state == :ok
         @dom[:span class="icon icon-check"]
       else
-        incontext(draw, choose_context(d))
+        @dynamic! let context = TopLevelContext(d), intent = choose_intent(d)
+          Base.invokelatest(draw, intent[], context[], d.data)
+        end
       end
       display(d, view)
     catch e
@@ -395,20 +395,19 @@ schedule_display(d::InlineResult) = begin
   nothing
 end
 
-choose_context(d::InlineResult, data=d.data) = ViewMode(d)
+choose_intent(d::InlineResult, data=d.data) = View()
+choose_intent(d::InlineResult, data::Union{String,Dict}) = Edit()
+
+"fallback rendering method"
+function doodle end
 
 """
-Serves as a fallback for `draw()`. If you are implmenting a new datatype or a custom UI
-Component for an existing data type then this is the method you should implement
+This is the main method
 """
-doodle(::Union{Nothing,Component}, data) = doodle(data)
-
-"""
-If you want to customise the way a datatype looks in a certain context then this is the
-method you need to specialise
-"""
-draw(ctx::AbstractContext) = draw(ctx, data(ctx))
-draw(ctx::AbstractContext, data) = doodle(component(ctx), data)
+draw(data) = draw(intent[], context[], data)
+draw(::Intent, ctx::AbstractContext, data) = draw(ctx, data)
+draw(ctx::AbstractContext, data) = draw(component(ctx), data)
+draw(::Any, data) = doodle(data)
 component(::TopLevelContext) = nothing
 component(ctx::Context) = ctx.node
 
@@ -448,14 +447,14 @@ findpath(parent, target, path=UInt8[]) = begin
   end
 end
 
-transact(change::Change) = transact(change, context[])
-transact(change::Change, ctx::Context) = transact(up(ctx, change), up(ctx))
-transact(change::Change, ctx::TopLevelContext) = display_result(ctx.device, apply(change, data(ctx)))
-transact(change::Change, ctx::EditMode) = begin
+transact(change::Change) = transact(intent[], context[], change)
+transact(i::Intent, ctx::Context, change::Change) = transact(i, up(ctx), up(ctx, change))
+transact(::View, ctx::TopLevelContext, change::Change) = display_result(ctx.device, apply(change, data(ctx)))
+transact(::Edit, ctx::TopLevelContext, change::Change) = begin
   @destruct {path, line, id} = ctx.device.snippet
   d = apply(change, data(ctx))
   src = serialize(d, width=100, mod=Kip.get_module(path))
-  msg("edit", src, line, id)
+  Atom.@msg edit(src, line, id)
   display_result(ctx.device, d)
 end
 

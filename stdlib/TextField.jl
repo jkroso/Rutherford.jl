@@ -1,10 +1,10 @@
 @use "github.com/jkroso/Destructure.jl" @destruct
-@use ".." @dom @css_str @component doodle emit choose_context draw InlineResult EditMode
+@use ".." @dom @css_str @component emit draw TopLevelContext
 @use "../transactions.jl" Swap
 
 @component TextField(state=0)
 
-doodle(t::TextField, value) = begin
+draw(t::TextField, value) = begin
   @destruct {placeholder="Type here", attrs...} = t.attrs
   onkeydown(e) = begin
     editpoint = min(length(value), t.state)
@@ -39,9 +39,7 @@ doodle(t::TextField, value) = begin
   @dom[:span{onkeydown, attrs...} isempty(value) ? placeholder : value]
 end
 
-choose_context(d::InlineResult, ::String) = EditMode(d)
-
-draw(ctx::EditMode, str::String) =
+draw(ctx::TopLevelContext, str::String) =
   @dom[:span class="syntax--string syntax--quoted syntax--double"
     [:span '"']
     [TextField focus=true]
