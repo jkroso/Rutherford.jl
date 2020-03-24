@@ -11,11 +11,20 @@
   "JunoLab" [
     "CodeTools.jl" => CodeTools
     "Atom.jl" => Atom]]
-@use "." @component Context draw doodle path data stop
+@use "." @component Context component path data stop intent context 
 @use "./markdown" renderMD
 using InteractiveUtils
 import Markdown
 import Dates
+
+"render data specifically for a certain context and/or intent"
+draw(data) = draw(intent[], context[], data)
+draw(intent, ctx, data) = draw(ctx, data)
+draw(ctx::Context, data) = draw(component(ctx), data)
+draw(_, data) = doodle(data)
+
+"fallback rendering method that ignores context and intent"
+function doodle end
 
 "Formats long numbers with commas seperating it into chunks"
 seperate(value::Number; kwargs...) = seperate(string(convert(Float64, value)), kwargs...)

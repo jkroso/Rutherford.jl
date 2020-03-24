@@ -104,8 +104,6 @@ end
 A UI chunk that might have some private state associated with it. Component subtypes should
 be created with the `@component` macro. e.g `@component SubtypeName`. Because they need to
 have certain fields in a certain order
-
-All Components should implement `doodle(<:Component)`
 """
 abstract type Component <: DOM.Node end
 
@@ -128,7 +126,7 @@ macro component(expr)
     function $name(attrs, content)
       c = $name(attrs, content, $(esc(state)), context[], intent[],
                 @defer(@dynamic!(let context = c.context, intent = c.intent
-                  Base.invokelatest(draw, data(context[]))
+                  Base.invokelatest(draw, c.intent, c.context, data(c.context))
                 end)::DOM.Node))
     end
   end
@@ -227,8 +225,8 @@ Atom.handle("event") do id, data
   if res isa Atom.EvalError
     try
       Base.showerror(IOContext(stderr, :limit => true), res)
-    catch err
-      show(stderr, err)
+    catch e
+      showerror(stderr, e)
     end
   end
   res
@@ -389,7 +387,7 @@ schedule_display(d::InlineResult) = begin
       end
       display(d, view)
     catch e
-      show(stderr, e)
+      showerror(stderr, e)
     end
   end
   nothing
@@ -398,16 +396,7 @@ end
 choose_intent(d::InlineResult, data=d.data) = View()
 choose_intent(d::InlineResult, data::Union{String,Dict}) = Edit()
 
-"fallback rendering method"
-function doodle end
-
-"""
-This is the main method
-"""
-draw(data) = draw(intent[], context[], data)
-draw(::Intent, ctx::AbstractContext, data) = draw(ctx, data)
-draw(ctx::AbstractContext, data) = draw(component(ctx), data)
-draw(::Any, data) = doodle(data)
+"get the Component"
 component(::TopLevelContext) = nothing
 component(ctx::Context) = ctx.node
 
@@ -470,6 +459,6 @@ current_device(::Nothing) = nothing
 top(ctx::TopLevelContext) = ctx
 top(ctx::Context) = top(ctx.parent)
 
-@use "./draw.jl"
+@use "./draw.jl" draw
 @use "./stdlib/TextField.jl" TextField
 @use "./stdlib/Stack.jl" VStack StackItem
