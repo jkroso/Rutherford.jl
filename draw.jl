@@ -11,7 +11,7 @@
   "JunoLab" [
     "CodeTools.jl" => CodeTools
     "Atom.jl" => Atom]]
-@use "." @component Context component path data stop intent context 
+@use "." @component Context path data stop intent context
 @use "./markdown" renderMD
 using InteractiveUtils
 import Markdown
@@ -19,9 +19,13 @@ import Dates
 
 "render data specifically for a certain context and/or intent"
 draw(data) = draw(intent[], context[], data)
-draw(intent, ctx, data) = draw(ctx, data)
-draw(ctx::Context, data) = draw(component(ctx), data)
+draw(intent, ctx, data) = begin
+  c = component(intent, ctx, data)
+  isnothing(c) ? draw(ctx, data) : c
+end
+draw(ctx::Context, data) = draw(ctx.component, data)
 draw(_, data) = doodle(data)
+component(intent, ctx, data) = nothing
 
 "fallback rendering method that ignores context and intent"
 function doodle end
@@ -330,7 +334,7 @@ doodle(m::Base.MethodList) = begin
 end
 
 brief(m::Base.MethodList) = @dom[:span name(m) " has $(length(collect(m))) methods"]
-body(m::Base.MethodList) = @dom[:div (@dom[:div doodle(method)] for method in m)...]
+body(m::Base.MethodList) = @dom[vstack (doodle(method) for method in m)...]
 
 @component MethodListView
 data(ctx::Context{MethodListView}) = methods(data(ctx.parent))

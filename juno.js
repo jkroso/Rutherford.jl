@@ -275,8 +275,11 @@ connection.client.ipc.handle("edit", (src, line, id) => {
   editor.setTextInBufferRange(range, src)
 })
 
-connection.client.ipc.handle("highlight", ({src, grammer, block}) => {
-  grammar = atom.grammars.grammarForScopeName(grammer)
+const grammar_remap = {"source.jldoctest": "source.julia.console"}
+
+connection.client.ipc.handle("highlight", ({src, grammar, block}) => {
+  if (grammar in grammar_remap) grammar = grammar_remap[grammar]
+  grammar = atom.grammars.grammarForScopeName(grammar) || atom.grammars.grammarForScopeName("text.plain")
   return Highlighter.highlight(src, grammar, {scopePrefix: 'syntax--', block})
 })
 

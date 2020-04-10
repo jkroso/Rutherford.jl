@@ -222,14 +222,8 @@ const event_parsers = Dict{String,Function}(
 Atom.handle("event") do id, data
   event = event_parsers[data["type"]](data)
   res = Atom.@errs emit(inline_displays[id], event)
-  if res isa Atom.EvalError
-    try
-      Base.showerror(IOContext(stderr, :limit => true), res)
-    catch e
-      showerror(stderr, e)
-    end
-  end
-  res
+  res isa Atom.EvalError && showerror(IOContext(stderr, :limit => true), res)
+  nothing
 end
 
 Atom.handle("reset module") do file
@@ -257,6 +251,10 @@ abstract type Intent end
 
 @struct TopLevelContext(device::InlineResult) <: AbstractContext
 data(c::TopLevelContext) = c.device.data
+
+Base.getproperty(c::AbstractContext, f::Symbol) = getproperty(c, Field{f}())
+Base.getproperty(c::Context, ::Field{:component}) = getfield(c, :node)
+Base.getproperty(::TopLevelContext, ::Field{:component}) = nothing
 
 "Provides access to the current rendering Intent"
 const intent = Ref{Union{Intent, Nothing}}(nothing)
@@ -325,18 +323,13 @@ getblocks(data, path, src) = begin
 end
 Atom.handle(getblocks, "getblocks")
 
+const evallock = ReentrantLock()
 evaluate(s::Snippet) =
-  lock(Atom.evallock) do
+  lock(evallock) do
     Atom.withpath(s.path) do
       m = Kip.get_module(s.path, interactive=true)
       res = Atom.@errs include_string(m, s.text, s.path, s.line)
-      if res isa Atom.EvalError
-        try
-          Base.showerror(IOContext(stderr, :limit => true), res)
-        catch err
-          show(stderr, err)
-        end
-      end
+      res isa Atom.EvalError && showerror(IOContext(stderr, :limit => true), res)
       res
     end
   end
@@ -396,10 +389,6 @@ end
 choose_intent(d::InlineResult, data=d.data) = View()
 choose_intent(d::InlineResult, data::Union{String,Dict}) = Edit()
 
-"get the Component"
-component(::TopLevelContext) = nothing
-component(ctx::Context) = ctx.node
-
 "used to tell emit() to stop recursion"
 const stop = Ref{Bool}(false)
 
@@ -421,8 +410,7 @@ end
 # Generate a custom event
 emit(name::Symbol, value) = begin
   device = current_device()
-  node = component(context[])
-  path = findpath(device.view, node)
+  path = findpath(device.view, context[].component)
   e = CustomEvent(name, path, value)
   emit(device, e)
 end
@@ -459,6 +447,6 @@ current_device(::Nothing) = nothing
 top(ctx::TopLevelContext) = ctx
 top(ctx::Context) = top(ctx.parent)
 
-@use "./draw.jl" draw
+@use "./draw.jl" draw doodle
 @use "./stdlib/TextField.jl" TextField
 @use "./stdlib/Stack.jl" VStack StackItem

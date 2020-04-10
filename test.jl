@@ -1,7 +1,13 @@
 @use "github.com/jkroso/Rutherford.jl" msg current_device @dynamic!
-@use "github.com/jkroso/Rutherford.jl/draw.jl" doodle @dom @css_str color hstack vstack
+@use "github.com/jkroso/Rutherford.jl/draw.jl" doodle @dom @css_str hstack vstack
 @use "github.com/ssfrr/DeepDiffs.jl" deepdiff DeepDiff SimpleDiff
-@use "github.com/IainNZ/Humanize.jl" datasize
+@use "github.com/jkroso/DOM.jl/ansi.jl" ansi
+
+datasize(value::Number) = begin
+  power = max(1, round(Int, value > 0 ? log10(value) : 3) - 2)
+  suffix = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"][power]
+  string(round(Int, 1e3*value / 1e3^power), suffix)
+end
 
 abstract type Test end
 
@@ -65,7 +71,7 @@ doodle(r::Test) = begin
              padding: 1px
              """
     [:span pass ? pass_icon(r) : fail_icon(r)]
-    [:span round(Int, 1000time) [:span "ms"] " $(round(Int, mallocs))mallocs " replace(datasize(bytes), ' '=>"")]]
+    [:span round(Int, 1000time) [:span "ms"] " $(round(Int, mallocs))mallocs " datasize(bytes)]]
 end
 
 doodle(c::Comparison) = begin
@@ -86,7 +92,7 @@ pass_icon(::TestSet) = "👍"
 fail_icon(::TestSet) = "👎"
 
 showdiff(io, diff) = show(IOContext(io, :color=>true), diff)
-doodle(d::DeepDiff) = @dom[:span color(sprint(showdiff, d))]
+doodle(d::DeepDiff) = @dom[:span ansi(sprint(showdiff, d))]
 doodle(d::SimpleDiff) = @dom[:span "got " doodle(d.before) " expected " doodle(d.after)]
 
 notify_fail(d=current_device()) = msg("test failed", convert(NamedTuple, d.snippet))
