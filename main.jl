@@ -221,8 +221,10 @@ const event_parsers = Dict{String,Function}(
 
 Atom.handle("event") do id, data
   event = event_parsers[data["type"]](data)
-  res = Atom.@errs emit(inline_displays[id], event)
-  res isa Atom.EvalError && showerror(IOContext(stderr, :limit => true), res)
+  if haskey(inline_displays, id)
+    res = Atom.@errs emit(inline_displays[id], event)
+    res isa Atom.EvalError && showerror(IOContext(stderr, :limit => true), res)
+  end
   nothing
 end
 

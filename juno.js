@@ -236,7 +236,7 @@ connection.client.ipc.handle("render", ({state, dom, id}) => {
     r.isfocused || r.focus_trap.focus()
   }, true)
   top_node.addEventListener("keydown", (e) => {
-    if (e.key == "Escape") r.prev_focus.focus()
+    if (e.key == "Escape" && r.prev_focus) r.prev_focus.focus()
   }, true)
 
   const sendEvent = (e) => {
