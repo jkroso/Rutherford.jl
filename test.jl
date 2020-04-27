@@ -70,7 +70,7 @@ doodle(r::Test) = begin
                > span {font-size: 0.9em; opacity: 0.8}
              padding: 1px
              """
-    [:span pass ? pass_icon(r) : fail_icon(r)]
+    [:span pass ? "✓" : "✗"]
     [:span round(Int, 1000time) [:span "ms"] " $(round(Int, mallocs))mallocs " datasize(bytes)]]
 end
 
@@ -86,10 +86,6 @@ data(t::TestSet) = map(+, map(data, t.tests)...)
 ispass(t::Result) = t.data[1]
 ispass(t::Comparison) = t.data[1] == t.expected
 ispass(t::TestSet) = all(ispass, t.tests)
-fail_icon(::Test) = "✗"
-pass_icon(::Test) = "✓"
-pass_icon(::TestSet) = "👍"
-fail_icon(::TestSet) = "👎"
 
 showdiff(io, diff) = show(IOContext(io, :color=>true), diff)
 doodle(d::DeepDiff) = @dom[:span ansi(sprint(showdiff, d))]
