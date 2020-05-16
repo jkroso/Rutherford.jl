@@ -19,9 +19,10 @@ Atom.handle("completions") do data
 end
 Atom.getmodule(m::Module) = m
 Atom.getmodule(s::AbstractString) = begin
+  s = replace(s, r"…$"=>"") # if the name is long it will be elided
   if occursin('⭒', s)
     for m in values(Kip.modules)
-      string(m) == s && return m
+      startswith(string(m), s) && return m
     end
   else
     invoke(Atom.getmodule, Tuple{Any}, s)
