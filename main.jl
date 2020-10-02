@@ -38,16 +38,16 @@ msg(x::String, args...) = Atom.isactive(Atom.sock) && println(Atom.sock, repr(js
 const done_task = Task(identity)
 done_task.state = :done
 
-"Set the target of keyboard events"
-DOM.focus(node::DOM.Node) = begin
-  device = current_device()
-  if !isnothing(device) && node.attrs[:focus]
-    @assert isnothing(device.focused_node) "A node is already focused"
-    device.focused_node = node
-  else
-    node
-  end
-end
+# "Set the target of keyboard events"
+# DOM.focus(node::DOM.Node) = begin
+#   device = current_device()
+#   if !isnothing(device) && node.attrs[:focus]
+#     @assert isnothing(device.focused_node) "A node is already focused"
+#     device.focused_node = node
+#   else
+#     node
+#   end
+# end
 
 @struct CustomEvent(name::Symbol, path::Events.DOMPath, value::Any) <: Events.Event
 Events.name(e::CustomEvent) = e.name
@@ -123,12 +123,18 @@ macro component(expr)
       ctx::AbstractContext
       intent::Intent
       view::Deferred{DOM.Node}
-    end
-    function $name(attrs, content)
-      c = $name(attrs, content, $(esc(state)), context[], intent[],
-                @defer(@dynamic!(let context = c.context, intent = c.intent
-                  Base.invokelatest(draw, c.intent, c.context, data(c.context))
-                end)::DOM.Node))
+      function $name(attrs, content)
+        c = new(attrs, content, $(esc(state)), context[], intent[])
+        c.view = @defer(@dynamic!(let context = c.context, intent = c.intent
+          Base.invokelatest(draw, c.intent, c.context, data(c.context))
+        end)::DOM.Node)
+        c
+      end
+      function $name(fn::Function, attrs=Dict{Symbol,Any}(), content=DOM.Node[])
+        c = new(attrs, content, $(esc(state)), context[], intent[])
+        c.view = @defer(@dynamic!(let context = c.context, intent = c.intent; fn(c) end)::DOM.Node)
+        c
+      end
     end
   end
 end
@@ -241,10 +247,10 @@ mutable struct InlineResult
   snippet::Snippet
   state::Symbol
   display_task::Task
-  focused_node::Union{Nothing,DOM.Node}
+  focus_path::Vector{UInt8}
   data::Any
   view::DOM.Node
-  InlineResult(s) = new(s, :ok, done_task, nothing)
+  InlineResult(s) = new(s, :ok, done_task, UInt8[])
 end
 
 "Intents describe what the user is trying to do with the data"
@@ -371,7 +377,6 @@ schedule_display(jr::TopLevelContext) = schedule_display(jr.device)
 schedule_display(d::InlineResult) = begin
   istaskdone(d.display_task) || return
   d.display_task = @async begin
-    d.focused_node = nothing
     try
       # if it ends in a semicolon then the user doesn't want to see the result
       view = if Atom.ends_with_semicolon(d.snippet.text) && d.state == :ok
@@ -395,19 +400,36 @@ choose_intent(d::InlineResult, data::Union{String,Dict}) = Edit()
 "used to tell emit() to stop recursion"
 const stop = Ref{Bool}(false)
 
-emit(d::InlineResult, e) = @dynamic! let stop=false; emit(d, e, 1) end
+"Will get set to the current event target before its handler is invoked"
+const event_index = Ref{UInt8}(0)
+
+emit(d::InlineResult, e) = @dynamic! let stop=false, event_index=0; emit(d, e, 1) end
 emit(d::InlineResult, e, i) = emit(d.view, e, i)
-emit(d::InlineResult, e::Events.Key, i) = isnothing(d.focused_node) || emit(d.focused_node, e, i)
-emit(d::Component, e, i) = @dynamic! let context = d.context; emit(d.view, e, i) end
+emit(d::InlineResult, e::Events.Key, i) = emit(d.view, assoc(e, :target, d.focus_path), i)
+emit(d::Component, e, i) = @dynamic! let context = d.context
+  emit(d.view, e, i)
+  invoke_handler(d, e, i)
+end
 emit(d::Container, e, i) = begin
   path = Events.path(e)
   if length(path) >= i
     child = d.children[path[i]]
     emit(child, e, i + 1)
   end
-  stop[] && return
+  invoke_handler(d, e, i)
+end
+
+invoke_handler(d, e, i) = if !stop[]
   fn = get(d.attrs, Events.name(e), nothing)
-  isnothing(fn) ? nothing : fn(e)
+  isnothing(fn) && return
+  @dynamic! let event_index = i; fn(e) end
+end
+
+"Set the target of keyboard events to the current event target"
+focus(e::Events.Event) = begin
+  d = current_device()
+  path = Events.path(e)
+  d.focus_path = path[1:event_index[]-1]
 end
 
 # Generate a custom event

@@ -228,7 +228,7 @@ connection.client.ipc.handle("render", ({state, dom, id}) => {
     r.isfocused = false
   }, true)
   r.focus_trap.addEventListener("focusin", (e) => {
-    top_node.style.boxShadow = "0px 0px 1px #1f96ff"
+    top_node.style.boxShadow = "0px 0px 3px #1f96ff"
     r.prev_focus = e.relatedTarget
     r.isfocused = true
   }, true)

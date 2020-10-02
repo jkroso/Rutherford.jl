@@ -1,5 +1,4 @@
 @use "github.com" [
-  "MikeInnes/MacroTools.jl" rmlines @capture
   "jkroso" [
     "DOM.jl" => DOM @dom @css_str [
       "ansi.jl" ansi
