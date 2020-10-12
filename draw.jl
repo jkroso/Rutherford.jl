@@ -268,6 +268,9 @@ doodle(u::Union) = brief(u)
 toUnionAll(T::DataType) = T.name.wrapper
 toUnionAll(U::UnionAll) = U
 
+doodle(e::Enum) = @dom[:span string(nameof(typeof(e))) "::" string(e)]
+doodle(E::Type{<:Enum}) = @dom[:span string(nameof(E)) "::(" join(map(string, instances(E)), ", ") ")"]
+
 fields(T) = try fieldnames(T) catch; () end
 
 fade(s) = @dom[:span class="fade" s]
