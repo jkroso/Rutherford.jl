@@ -187,10 +187,13 @@ union_params(u::Union) = push!(union_params(u.b), u.a)
 union_params(u) = Any[u]
 
 "By default just render the structure of the object"
-doodle(data::T) where T = begin
-  attrs = propertynames(data)
-  isempty(attrs) ? brief(T) : @dom[Expandable]
-end
+doodle(data::T) where T =
+  if hasmethod(show, Tuple{IO, MIME"text/html", T})
+    parse(MIME("text/html"), sprint(show, MIME("text/html"), data))
+  else
+    attrs = propertynames(data)
+    isempty(attrs) ? brief(T) : @dom[Expandable]
+  end
 
 @component PropertyName
 @component PropertyValue
