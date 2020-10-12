@@ -199,7 +199,7 @@ path(c::PropertyName) = c.attrs[:index]
 doodle(::PropertyName, name) = @dom[:span string(name)]
 
 brief(data::T) where T = @dom[:span brief(T) '[' length(propertynames(data)) ']']
-brief(n::Number) = draw(n)
+brief(n::Union{Number,Enum,Char}) = draw(n)
 body(data::T) where T = begin
   @dom[vstack
     (@dom[hstack
