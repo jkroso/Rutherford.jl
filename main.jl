@@ -295,8 +295,9 @@ end
 getblocks(data, path, src) = begin
   @destruct [[start_row, start_col], [end_row, end_col]] = data
   lines = collect(eachline(IOBuffer(src), keep=true))
+  utf8 = codeunits(src)
+  # full file
   if end_col == nothing
-    # full file
     start_row = start_col = 1
     end_row = length(lines)
     end_col = length(lines[end])
@@ -310,20 +311,20 @@ getblocks(data, path, src) = begin
   start_i = 0
   line = 1
   while line < start_row
-    start_i += length(lines[line])
+    start_i += ncodeunits(lines[line])
     line += 1
   end
   start_i += start_col
   end_i = start_i
   while line < end_row
-    end_i += length(lines[line])
+    end_i += ncodeunits(lines[line])
     line += 1
   end
   blocks = Any[]
   while start_i <= end_i
     (ast, i) = Meta.parse(src, start_i)
-    line = countlines(IOBuffer(src[1:start_i])) - 1
-    text = src[start_i:i-1]
+    line = countlines(IOBuffer(utf8[1:start_i])) - 1
+    text = String(utf8[start_i:i-1])
     range = [[line, 0], [line+countlines(IOBuffer(text))-1, 0]]
     push!(blocks, (text=strip(text), line=line, range=range))
     start_i = i
