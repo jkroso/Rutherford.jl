@@ -471,7 +471,7 @@ doodle(e::Atom.EvalError) = begin
 end
 
 doodle(e::Expr) = begin
-  html = Atom.@rpc highlight((src=serialize(e), grammer="source.julia", block=true))
+  html = Atom.@rpc highlight((src=serialize(e), grammar="source.julia", block=true))
   font = Atom.@rpc config("editor.fontFamily")
   dom = parse(MIME("text/html"), html)
   dom.attrs[:style] = Dict("fontFamily" => font)
