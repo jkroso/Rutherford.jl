@@ -1,5 +1,6 @@
 @use "github.com/jkroso/Rutherford.jl" msg current_device @dynamic!
 @use "github.com/jkroso/Rutherford.jl/draw.jl" doodle @dom @css_str hstack vstack
+@use "github.com/jkroso/Prospects.jl" assoc
 @use "github.com/ssfrr/DeepDiffs.jl" deepdiff DeepDiff SimpleDiff
 @use "github.com/jkroso/DOM.jl/ansi.jl" ansi
 
@@ -12,12 +13,12 @@ end
 abstract type Test end
 
 struct Result <: Test
-  data::Tuple
+  data::NamedTuple
 end
 
 struct Comparison <: Test
-  data::Tuple
-  expected
+  data::NamedTuple
+  expected::Any
 end
 
 struct TestSet <: Test
@@ -76,15 +77,15 @@ end
 
 doodle(c::Comparison) = begin
   a, time, bytes, gctime, memallocs = c.data
-  ispass(c) && return doodle(Result((true, time, bytes, gctime, memallocs)))
+  ispass(c) && return doodle(Result(assoc(c.data, :value, true)))
   notify_fail()
   @dom[hstack "💥" doodle(deepdiff(a, c.expected))]
 end
 
-data(t::Test) = [t.data[2:4]..., t.data[5].poolalloc]
+data(t::Test) = [t.data.time, t.data.bytes, t.data.gctime, t.data.gcstats.poolalloc]
 data(t::TestSet) = map(+, map(data, t.tests)...)
-ispass(t::Result) = t.data[1]
-ispass(t::Comparison) = t.data[1] == t.expected
+ispass(t::Result) = t.data.value
+ispass(t::Comparison) = t.data.value == t.expected
 ispass(t::TestSet) = all(ispass, t.tests)
 
 showdiff(io, diff) = show(IOContext(io, :color=>true), diff)
