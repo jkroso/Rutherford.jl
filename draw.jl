@@ -50,8 +50,8 @@ spacer(attrs, children) = begin
 end
 
 syntax(x) = @dom[:span class="syntax--language syntax--julia" class=syntax_class(x) repr(x)]
-syntax_class(n::Bool) = ["syntax--constant", "syntax--boolean"]
-syntax_class(x::Number) = ["syntax--constant", "syntax--numeric"]
+syntax_class(::Bool) = ["syntax--constant", "syntax--boolean"]
+syntax_class(::Number) = ["syntax--constant", "syntax--numeric"]
 syntax_class(::AbstractString) = ["syntax--string", "syntax--quoted", "syntax--double"]
 syntax_class(::Regex) = ["syntax--string", "syntax--regexp"]
 syntax_class(::Symbol) = ["syntax--constant", "syntax--other", "syntax--symbol"]
@@ -59,7 +59,7 @@ syntax_class(::Char) = ["syntax--string", "syntax--quoted", "syntax--single"]
 syntax_class(::VersionNumber) = ["syntax--string", "syntax--quoted", "syntax--other"]
 syntax_class(::Nothing) = ["syntax--constant"]
 syntax_class(::Function) = ["syntax--support", "syntax--function"]
-syntax_class(e::Missing) = []
+syntax_class(::Missing) = []
 
 doodle(n::Union{AbstractFloat,Integer}) = @dom[:span class="syntax--language syntax--julia syntax--constant syntax--numeric" seperate(n)]
 doodle(x::Union{Regex,Symbol,Char,VersionNumber,Nothing,Number,Missing}) = syntax(x)
@@ -202,7 +202,8 @@ path(c::PropertyName) = c.attrs[:index]
 doodle(::PropertyName, name) = @dom[:span string(name)]
 
 brief(data::T) where T = @dom[:span brief(T) '[' length(propertynames(data)) ']']
-brief(n::Union{Number,Enum,Char}) = syntax(n)
+brief(n::Union{Number,Char}) = syntax(n)
+brief(e::Enum) = doodle(e)
 body(data::T) where T = begin
   @dom[vstack
     (@dom[hstack
