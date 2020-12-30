@@ -16,9 +16,18 @@ renderMD(::Markdown.HorizontalRule) = @dom[:hr]
 renderMD(h::Markdown.Header{l}) where l =
   DOM.Container{Symbol(:h, l)}(DOM.Attrs(), map(renderMDinline, flat(h.text)))
 
+"highlights using Atoms own highlighter when possible"
+highlight(src, language) = begin
+  if haskey(ENV, "ATOM_HOME")
+    grammer = isempty(language) ? "text.plain" : "source.$language"
+    Atom.@rpc highlight((src=c.code, grammer=grammer, block=true))
+  else
+    read(pipeline(IOBuffer(src), `pygmentize -f html -O "noclasses" -l $language`), String)
+  end
+end
+
 renderMD(c::Markdown.Code) = begin
-  language = isempty(c.language) ? "text.plain" : "source.$(c.language)"
-  html = Atom.@rpc highlight((src=c.code, grammer=language, block=true))
+  html = highlight(c.code, c.language)
   dom = parse(MIME("text/html"), html)
   dom.attrs[:class] = Set([css"""
                            display: flex
