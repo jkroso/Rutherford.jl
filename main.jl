@@ -35,8 +35,8 @@ msg(x; kwargs...) = msg(x, kwargs)
 # TODO: figure out why I need to buffer the JSON in a String before writing it
 msg(x::String, args...) = Atom.isactive(Atom.sock) && println(Atom.sock, repr(json, Any[x, args...]))
 
-const done_task = Task(identity)
-done_task.state = :done
+const done_task = @task nothing
+yield(done_task)
 
 # "Set the target of keyboard events"
 # DOM.focus(node::DOM.Node) = begin
