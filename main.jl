@@ -214,17 +214,17 @@ Base.setproperty!(c::Component, ::Field{:state}, x) = begin
 end
 
 const event_parsers = Dict{String,Function}(
-  "mousedown" => d-> Events.MouseDown(d["path"], Events.MouseButton(d["button"]), d["position"]...),
-  "mouseup" => d-> Events.MouseUp(d["path"], Events.MouseButton(d["button"]), d["position"]...),
+  "mousedown" => d-> Events.MouseDown(d["path"], Events.MouseButton(d["button"]), map(round, d["position"])...),
+  "mouseup" => d-> Events.MouseUp(d["path"], Events.MouseButton(d["button"]), map(round, d["position"])...),
   "mouseover" => d-> Events.MouseOver(d["path"]),
   "mouseout" => d-> Events.MouseOut(d["path"]),
-  "click" => d-> Events.Click(d["path"], Events.MouseButton(d["button"]), d["position"]...),
-  "dblclick" => d-> Events.DoubleClick(d["path"], Events.MouseButton(d["button"]), d["position"]...),
-  "mousemove" => d-> Events.MouseMove(d["path"], d["position"]...),
+  "click" => d-> Events.Click(d["path"], Events.MouseButton(d["button"]), map(round, d["position"])...),
+  "dblclick" => d-> Events.DoubleClick(d["path"], Events.MouseButton(d["button"]), map(round, d["position"])...),
+  "mousemove" => d-> Events.MouseMove(d["path"], map(round, d["position"])...),
   "keydown" => d-> Events.KeyDown(UInt8[], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
   "keyup" => d-> Events.KeyUp(UInt8[], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
   "resize" => d-> Events.Resize(d["width"], d["height"]),
-  "scroll" => d-> Events.Scroll(d["path"], d["position"]...))
+  "scroll" => d-> Events.Scroll(d["path"], map(round, d["position"])...))
 
 Atom.handle("event") do id, data
   event = event_parsers[data["type"]](data)
