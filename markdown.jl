@@ -20,7 +20,7 @@ renderMD(h::Markdown.Header{l}) where l =
 highlight(src, language) = begin
   if haskey(ENV, "ATOM_HOME")
     grammer = isempty(language) ? "text.plain" : "source.$language"
-    Atom.@rpc highlight((src=c.code, grammer=grammer, block=true))
+    Atom.@rpc highlight((src=src, grammer=grammer, block=true))
   else
     read(pipeline(IOBuffer(src), `pygmentize -f html -O "noclasses" -l $language`), String)
   end
