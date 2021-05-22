@@ -34,10 +34,10 @@ seperate(value::Number; kwargs...) = seperate(string(convert(Float64, value)), k
 seperate(value::Integer; kwargs...) = seperate(string(value), kwargs...)
 seperate(str::String, sep = ",", k = 3) = begin
   parts = split(str, '.')
-  str = parts[1]
-  n = length(str)
-  groups = (str[max(x-k+1, 1):x] for x in reverse(n:-k:1))
-  whole_part = @dom[:span interleave(groups, @dom[:span css"color: grey" sep])...]
+  int = parts[1]
+  uint = split(int, '-')[end]
+  groups = (uint[max(x-k+1, 1):x] for x in reverse(length(uint):-k:1))
+  whole_part = @dom[:span startswith(int, '-') ? "-" : "" interleave(groups, @dom[:span css"color: grey" sep])...]
   length(parts) == 1 && return whole_part
   @dom[:span whole_part @dom[:span css"color: grey" "."] parts[2]]
 end
@@ -62,6 +62,7 @@ syntax_class(::Function) = ["syntax--support", "syntax--function"]
 syntax_class(::Missing) = []
 
 doodle(n::Union{AbstractFloat,Integer}) = @dom[:span class="syntax--language syntax--julia syntax--constant syntax--numeric" seperate(n)]
+doodle(n::Unsigned) = @dom[:span class="syntax--language syntax--julia syntax--constant syntax--numeric" repr(n)]
 doodle(x::Union{Regex,Symbol,Char,VersionNumber,Nothing,Number,Missing}) = syntax(x)
 doodle(b::Bool) = syntax(b)
 doodle(d::Dates.Date) = @dom[:span Dates.format(d, Dates.dateformat"dd U Y")]
