@@ -487,3 +487,5 @@ doodle(e::Expr) = begin
                            """])
   dom
 end
+
+doodle(bits::BitVector) = @dom[:span "BitVector[" doodle(length(bits)) "] " map(doodle∘Int, bits)...]
