@@ -189,7 +189,7 @@ union_params(u) = Any[u]
 
 "By default just render the structure of the object"
 doodle(data::T) where T =
-  if hasmethod(show, Tuple{IO, MIME"text/html", T})
+  if showable("text/html", data)
     parse(MIME("text/html"), sprint(show, MIME("text/html"), data))
   else
     attrs = propertynames(data)
