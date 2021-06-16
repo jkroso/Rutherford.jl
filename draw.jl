@@ -402,6 +402,20 @@ doodle(m::Markdown.MD) =
 
 doodle(x::Union{AbstractDict,AbstractVector,Set}) = isempty(x) ? brief(x) : @dom[Expandable]
 
+doodle(a::AbstractMatrix) =
+  @dom[:table css"""
+              display: grid
+              border: 1px solid lightgrey
+              margin: 0.5em 0
+              border-radius: 5px
+              background: rgb(250,250,250)
+              td {padding: 0.4em 1em}
+              tr:nth-child(even) {background: rgb(235,235,235)}
+              tr > td:first-child {padding-left: 1em}
+              """
+    [:tbody
+      (@dom[:tr (@dom[:td doodle(x)] for x in row)...] for row in eachrow(a))...]]
+
 @component DictKey
 @component DictValue
 @component IndexedItem
