@@ -372,7 +372,7 @@ doodle(m::Markdown.MD) =
     margin: 0 auto
     padding: 1.5em
     white-space: normal
-    font: 17px/1.5em helvetica-light, sans-serif
+    font: 1em/1.6em helvetica-light, sans-serif
     code.inline
       font-family: SourceCodePro-light
       border-radius: 3px
