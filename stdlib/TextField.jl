@@ -38,9 +38,3 @@ draw(t::TextField, value) = begin
   end
   @dom[:span{onkeydown, attrs...} isempty(value) ? placeholder : value]
 end
-
-draw(ctx::TopLevelContext, str::String) =
-  @dom[:span class="syntax--string syntax--quoted syntax--double"
-    [:span '"']
-    [TextField focus=true]
-    [:span '"']]

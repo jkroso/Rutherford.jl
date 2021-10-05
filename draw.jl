@@ -10,23 +10,11 @@
   "JunoLab" [
     "CodeTools.jl" => CodeTools
     "Atom.jl" => Atom]]
-@use "." @component Context path data stop intent context
 @use "./markdown" renderMD
 using InteractiveUtils
 import Markdown
 import Dates
 
-"render data specifically for a certain context and/or intent"
-draw(data) = draw(intent[], context[], data)
-draw(intent, ctx, data) = begin
-  c = component(intent, ctx, data)
-  isnothing(c) ? draw(ctx, data) : c
-end
-draw(ctx::Context, data) = draw(ctx.component, data)
-draw(_, data) = doodle(data)
-component(intent, ctx, data) = nothing
-
-"fallback rendering method that ignores context and intent"
 function doodle end
 
 "Formats long numbers with commas seperating it into chunks"
@@ -140,7 +128,7 @@ doodle(m::Module) = begin
       (@dom[hstack
         [:span String(name)]
         [:span css"padding: 0 10px" "→"]
-        isdefined(m, name) ? @dom[PropertyValue key=name] : fade("#undef")]
+        isdefined(m, name) ? doodle(getfield(m, name)) : fade("#undef")]
       for name in names(m, all=true) if !occursin('#', String(name)) && name != nameof(m))...]
   end
 end
@@ -193,26 +181,19 @@ doodle(data::T) where T =
     parse(MIME("text/html"), sprint(show, MIME("text/html"), data))
   else
     attrs = propertynames(data)
-    isempty(attrs) ? brief(T) : @dom[Expandable]
+    isempty(attrs) ? brief(T) : @dom[vstack brief(T) body(data)]
   end
-
-@component PropertyName
-@component PropertyValue
-data(ctx::Context{PropertyName}) = propertynames(data(ctx.parent))[path(ctx)]
-path(c::PropertyName) = c.attrs[:index]
-doodle(::PropertyName, name) = @dom[:span string(name)]
 
 brief(data::T) where T = @dom[:span brief(T) '[' length(propertynames(data)) ']']
 brief(n::Union{Number,Char}) = syntax(n)
 brief(e::Enum) = doodle(e)
-body(data::T) where T = begin
+body(data) =
   @dom[vstack
     (@dom[hstack
-      [PropertyName index=i]
+      [:span string(field)]
       [:span css"padding: 0 10px" "→"]
-      hasproperty(data, field) ? @dom[PropertyValue key=field] : fade("#undef")]
-     for (i, field) in enumerate(propertynames(data)))...]
-end
+      hasproperty(data, field) ? doodle(getproperty(data, field)) : fade("#undef")]
+     for field in propertynames(data))...]
 
 brief(T::DataType) =
   @dom[:span
@@ -238,10 +219,6 @@ brief(s::Symbol) = doodle(s)
 
 doodle(x::UnionAll) = doodle(x.body)
 
-@component FieldType
-data(ctx::Context{FieldType}) = fieldtype(data(ctx.parent), path(ctx))
-path(c::FieldType) = c.attrs[:name]
-
 doodle(T::DataType) = begin
   attrs = fields(T)
   isempty(attrs) && return header(T)
@@ -252,7 +229,7 @@ doodle(T::DataType) = begin
         (@dom[hstack
           [:span String(name)]
           [:span "::"]
-          [FieldType name=name]]
+          brief(fieldtype(T, name))]
         for name in attrs)...]
       expandable(@dom[:h4 "Constructors"]) do
         name = @dom[:span class="syntax--support syntax--function" string(T.name.name)]
@@ -338,16 +315,13 @@ doodle(m::Base.MethodList) = begin
   ms = collect(m)
   isempty(ms) && return @dom[:span name(m) " has no methods"]
   length(ms) == 1 && return doodle(ms[1])
-  @dom[Expandable]
+  @dom[vstack map(doodle, ms)...]
 end
 
 brief(m::Base.MethodList) = @dom[:span name(m) " has $(length(collect(m))) methods"]
 body(m::Base.MethodList) = @dom[vstack (doodle(method) for method in m)...]
 
-@component MethodListView
-data(ctx::Context{MethodListView}) = methods(data(ctx.parent))
-
-doodle(f::Function) = @dom[Expandable]
+doodle(f::Function) = @dom[vstack brief(f) body(f)]
 brief(f::Function) = name(f)
 body(f::Function) = begin
   @dom[:div css"""
@@ -358,7 +332,7 @@ body(f::Function) = begin
             > div:last-child > div:last-child {overflow: visible}
             """
     Atom.CodeTools.hasdoc(f) ? @dom[:div css"padding: 8px 0" doodle(Base.doc(f))] : nothing
-    [MethodListView]]
+    [:div css"padding-left: 1em" doodle(methods(f))]]
 end
 
 isanon(f) = occursin('#', String(nameof(f)))
@@ -400,7 +374,7 @@ doodle(m::Markdown.MD) =
     """
     map(renderMD, CodeTools.flatten(m).content)...]
 
-doodle(x::Union{AbstractDict,AbstractVector,Set}) = isempty(x) ? brief(x) : @dom[Expandable]
+doodle(x::Union{AbstractDict,AbstractVector,Set}) = isempty(x) ? brief(x) : @dom[vstack brief(x) body(x)]
 
 doodle(a::AbstractMatrix) =
   @dom[:table css"""
@@ -416,40 +390,31 @@ doodle(a::AbstractMatrix) =
     [:tbody
       (@dom[:tr (@dom[:td doodle(x)] for x in row)...] for row in eachrow(a))...]]
 
-@component DictKey
-@component DictValue
-@component IndexedItem
-@component SetItem
-
-data(ctx::Context{SetItem}) = ctx.node.attrs[:value]
-data(ctx::Context{DictKey}) = collect(keys(data(ctx.parent)))[path(ctx)]
-
 body(dict::AbstractDict) =
-  @dom[:div
+  @dom[vstack css"padding-left: 1em"
     (@dom[:div css"display: flex"
-      [DictKey key=i]
+      doodle(key)
       [:span css"padding: 0 10px" "→"]
-      [DictValue key=key]]
-    for (i,key) in enumerate(keys(dict)))...]
+      doodle(value)]
+    for (key, value) in dict)...]
 
-doodle(t::NamedTuple) = length(t) < 5 ? literal(t) : @dom[Expandable]
-doodle(t::Tuple) = length(t) < 10 ? literal(t) : @dom[Expandable]
+doodle(t::NamedTuple) = literal(t)
+doodle(t::Tuple) = literal(t)
 
 literal(t::Tuple) = begin
-  items = (@dom[IndexedItem key=i] for i in 1:length(t))
-  content = collect(interleave(items, @dom[:span css"padding: 0 6px 0 0" ',']))
+  content = collect(interleave(map(doodle, t), @dom[:span css"padding: 0 6px 0 0" ',']))
   length(content) == 1 && push!(content, @dom[:span ','])
   @dom[hstack [:span '('] content... [:span ')']]
 end
 
 literal(t::NamedTuple) = begin
-  items = (@dom[hstack string(k) '=' [DictValue key=k]] for k in keys(t))
+  items = (@dom[hstack string(k) '=' doodle(t[k])] for k in keys(t))
   content = collect(interleave(items, @dom[:span css"padding: 0 6px 0 0" ',']))
   length(content) == 1 && push!(content, @dom[:span ','])
   @dom[hstack [:span '('] content... [:span ')']]
 end
 
-body(s::Set) = @dom[vstack (@dom[SetItem value=v] for v in s)...]
+body(s::Set) = @dom[vstack (doodle(v) for v in s)...]
 
 brief(nt::NamedTuple) =
   @dom[:span
@@ -458,26 +423,11 @@ brief(nt::NamedTuple) =
 
 body(nt::NamedTuple) =
   @dom[vstack
-    (@dom[hstack String(key) [:span css"padding: 0 5px" "="] [IndexedItem key=key]] for key in keys(nt))...]
+    (@dom[hstack String(key) [:span css"padding: 0 5px" "="] doodle(nt[key])] for key in keys(nt))...]
 
-body(v::Union{Tuple,AbstractVector}) =
-  @dom[vstack (@dom[IndexedItem key=i] for i in keys(v))...]
+body(v::Union{Tuple,AbstractVector}) = @dom[vstack map(doodle, v)...]
 
-"Shows a brief view that can be toggled into a more detailed view"
-@component Expandable(state=false)
-draw(e::Expandable, data) = begin
-  isopen = e.state
-  @dom[:div
-    [hstack css"align-items: center" onmousedown=(_)->e.state = !isopen
-      chevron(isopen)
-      haskey(e.attrs, :head) ? e.attrs[:head] : brief(data)]
-    if isopen
-      @dom[:div css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px"
-        haskey(e.attrs, :thunk) ? e.attrs[:thunk]() : body(data)]
-    end]
-end
-
-expandable(thunk, head) = @dom[Expandable thunk=thunk head=head]
+expandable(thunk, head) = @dom[vstack head thunk()]
 
 doodle(e::Atom.EvalError) = begin
   trace = Atom.cliptrace(Atom.errtrace(e))
