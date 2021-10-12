@@ -1,7 +1,8 @@
 @use "github.com" [
   "jkroso" [
     "DOM.jl" => DOM @dom @css_str ["Events.jl" => Events]
-    "Prospects.jl" @mutable @abstract @struct Field assoc]
+    "Prospects.jl" @mutable @abstract @struct Field assoc
+    "Promises.jl" need pending]
   "JunoLab/Atom.jl" => Atom]
 @use "./draw.jl" doodle vstack hstack chevron brief
 
@@ -44,19 +45,15 @@ mutable struct InlineResult
   InlineResult(snippet) = begin
     data = evaluate(snippet)
     ui = createUI(data)
-    d = new(snippet, data isa Atom.EvalError, data)
-    d.ui = DocumentNode(ui, d)
+    d = new(snippet, data isa Atom.EvalError, data, ui)
+    # d.ui = DocumentNode(ui, d)
+    # ui.parent = d.ui
     d
   end
 end
 
-struct DocumentNode <: UINode
-  ui::UINode
-  device::InlineResult
-end
-
-document(ui::UINode) = document(ui.parent)
-document(ui::DocumentNode) = ui
+@mutable DocumentNode(ui::UINode, device::InlineResult) <: UINode
+Base.convert(::Type{DOM.Node}, d::DocumentNode) = convert(DOM.Node, d.ui)
 
 "used to tell emit() to stop recursion"
 const stop = Ref{Bool}(false)
@@ -65,7 +62,11 @@ emit(d::InlineResult, e) = begin
   stop[] = false
   emit(d, e, 1)
 end
-emit(d::InlineResult, e, i) = emit(d.view, e, i)
+emit(d::InlineResult, e, i) = begin
+  if haskey(cache, d.ui)
+    emit(cache[d.ui], e, i)
+  end
+end
 emit(d::DOM.Container, e, i) = begin
   path = Events.path(e)
   if length(path) >= i
@@ -147,27 +148,29 @@ Base.getindex(c::ChildNodes, i::Integer) = begin
   node
 end
 
-const cache = WeakKeyDict()
+const cache = IdDict{UINode,DOM.Node}()
+uncache(x::UINode) = delete!(cache, x)
+
 Base.convert(::Type{DOM.Node}, ui::UINode) = begin
   dom = toDOM(ui)
-  dom.attrs = assoc(dom.attrs, :id, string(objectid(ui), base=62))
+  dom = assoc(dom, :attrs, assoc(dom.attrs, :id, string(objectid(ui), base=62)))
+  finalizer(uncache, ui)
   cache[ui] = dom
 end
 
 redraw(ui::UINode) = begin
-  device = document(ui).device
-  display_id = device.snippet.id
   old = cache[ui]
-  new = cache[ui] = toDOM(ui)
   id = string(objectid(ui), base=62)
-  new.attrs = assoc(new.attrs, :id, id)
-  patch = diff(old, new)
-  isempty(patch) || msg("patchnode", (id=display_id, node=id, patch=patch))
+  new = toDOM(ui)
+  new = assoc(new, :attrs, assoc(new.attrs, :id, id))
+  cache[ui] = new
+  patch = DOM.diff(old, new)
+  isnothing(patch) || msg("patchnode", (node=id, patch=patch))
   nothing
 end
 
 @mutable StaticView(data) <: UINode
-Base.convert(::Type{DOM.Node}, ui::StaticView) = doodle(ui.data)
+toDOM(ui::StaticView) = doodle(ui.data)
 
 @mutable DictUI(dict::AbstractDict, isopen=false) <: UINode
 toDOM(ui::DictUI) = begin
@@ -198,8 +201,6 @@ createUI(dict::AbstractDict) = begin
   @ui[DictUI(dict, false)
     (@ui[DictEntry(kv) createUI(kv[1]) createUI(kv[2])] for kv in dict)...]
 end
-
-# Dict(:a=>1,:b=>2,:c=>3)
 
 """
 Tells the UINode that time has passed. If components need to mutate themselves as

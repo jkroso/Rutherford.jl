@@ -1,10 +1,10 @@
+@use "github.com/jkroso/DOM.jl" => DOM
 @use "github.com" [
   "MikeInnes/MacroTools.jl" => MacroTools @match
   "jkroso" [
-    "DOM.jl" => DOM ["Events.jl" => Events]
+    "DOM.jl/Events.jl" => Events
     "Prospects.jl" assoc
-    "Destructure.jl" @destruct
-    "Promises.jl" need pending]
+    "Destructure.jl" @destruct]
   "JunoLab/Atom.jl" => Atom
   "JunoLab/Juno.jl" => Juno]
 @use "./redesign.jl" InlineResult emit Snippet

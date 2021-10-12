@@ -262,10 +262,8 @@ connection.client.ipc.handle("patch", ({id, patch, state}) => {
   DOM.patch(patch, top_node.lastChild)
 })
 
-connection.client.ipc.handle("patchnode", ({id, node, patch}) => {
-  const top_node = results[id].view.view
-  const target = top_node.getElementById(node)
-  DOM.patch(patch, target)
+connection.client.ipc.handle("patchnode", ({node, patch}) => {
+  DOM.patch(patch, document.getElementById(node))
 })
 
 connection.client.ipc.handle("AsyncNode", ({id, value}) => {
