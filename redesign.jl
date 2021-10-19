@@ -1,7 +1,8 @@
 @use "github.com" [
+  "MikeInnes/MacroTools.jl" => MacroTools @capture @match
   "jkroso" [
     "DOM.jl" => DOM @dom @css_str ["Events.jl" => Events]
-    "Prospects.jl" @mutable @abstract @struct Field assoc
+    "Prospects.jl" @mutable @abstract @struct Field assoc group
     "Promises.jl" need pending]
   "JunoLab/Atom.jl" => Atom]
 @use "./draw.jl" doodle vstack hstack chevron brief
@@ -45,9 +46,9 @@ mutable struct InlineResult
   InlineResult(snippet) = begin
     data = evaluate(snippet)
     ui = createUI(data)
-    d = new(snippet, data isa Atom.EvalError, data, ui)
-    # d.ui = DocumentNode(ui, d)
-    # ui.parent = d.ui
+    d = new(snippet, data isa Atom.EvalError, data)
+    d.ui = DocumentNode(ui, d)
+    ui.parent = d.ui
     d
   end
 end
@@ -62,11 +63,7 @@ emit(d::InlineResult, e) = begin
   stop[] = false
   emit(d, e, 1)
 end
-emit(d::InlineResult, e, i) = begin
-  if haskey(cache, d.ui)
-    emit(cache[d.ui], e, i)
-  end
-end
+emit(d::InlineResult, e, i) = haskey(cache, d.ui.ui) && emit(cache[d.ui.ui], e, i)
 emit(d::DOM.Container, e, i) = begin
   path = Events.path(e)
   if length(path) >= i
@@ -94,12 +91,16 @@ Base.display(d::InlineResult, view::DOM.Node) = begin
   d.view = view
 end
 
-macro ui(expr) handle_expr(expr) end
-handle_expr(x::Any) = esc(x)
-handle_expr(expr::Expr) = begin
+macro ui(expr) ui_macro(expr) end
+ui_macro(x::Any) = esc(x)
+ui_macro(expr::Expr) = begin
   if expr.head in (:hcat, :vcat, :array, :vect)
     this = tocall(expr.args[1])
-    children = map(handle_expr, expr.args[2:end])
+    attrs, children = group(isattr, @view expr.args[2:end])
+    children = map(ui_macro, children)
+    if !isempty(attrs)
+      this.args[end-4] = attr_expression(attrs)
+    end
     :(tree($this, $(children...)))
   else
     esc(expr)
@@ -112,6 +113,13 @@ tocall(s::Expr) = begin
   args = s.args[2:end]
   Expr(:call, esc(s.args[1]), map(esc, args)..., empty_attrs, nothing, nothing, nothing, nothing)
 end
+isattr(e) = @capture(e, (_ = _) | (_ => _))
+normalize_attr(e) =
+  @match e begin
+    ((:a_|a_) = b_) => :($(QuoteNode(a)) => $(esc(b)))
+    (s_Symbol) => :($(QuoteNode(s)) => $(esc(s)))
+    _ => esc(e)
+  end
 
 tree(node, children...) = begin
   prev_sibling = nothing
@@ -172,6 +180,21 @@ end
 @mutable StaticView(data) <: UINode
 toDOM(ui::StaticView) = doodle(ui.data)
 
+@mutable Expandable(data, isopen=false) <:UINode
+toDOM(e::Expandable) = begin
+  isopen = ui.isopen
+  onmousedown(_) = begin
+    ui.isopen = !isopen
+    redraw(ui)
+  end
+  @dom[vstack
+    [hstack{onmousedown} css"align-items: center" chevron(isopen) brief(ui.data)]
+    [vstack class.isopen=isopen
+            css"&.isopen {height: auto}"
+            css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px; height: 0px"
+      isopen ? e.attrs.children() : nothing]]
+end
+
 @mutable DictUI(dict::AbstractDict, isopen=false) <: UINode
 toDOM(ui::DictUI) = begin
   isopen = ui.isopen
@@ -207,16 +230,3 @@ Tells the UINode that time has passed. If components need to mutate themselves a
 time passes they can specialize this function
 """
 tick(ui::UINode) = foreach(tick, ui.children)
-
-"""
-This is invoked when the user interacts with the `UINode`. Usually either a
-mouse event or a keystroke
-"""
-emit(ui::UINode, e::Event) = begin
-  for child in ui.children
-    emit(child, e) && return true
-  end
-  onevent(ui, e)
-end
-
-onevent(ui::UINode, e::Event) = false
