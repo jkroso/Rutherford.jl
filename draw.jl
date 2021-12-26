@@ -392,6 +392,7 @@ doodle(m::Markdown.MD) =
       li {line-height: 1.5em}
       li p {margin-bottom: 0}
       ul > li {list-style: circle}
+      ul > li > *, ol > li > * {margin-top: 0}
     blockquote
       padding: 0 1em
       color: #6a737d
