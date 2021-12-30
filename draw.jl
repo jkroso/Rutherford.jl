@@ -386,13 +386,12 @@ doodle(m::Markdown.MD) =
     h2 {font-size: 1.5em}
     h3 {font-size: 1.25em}
     ul, ol
-      margin: 1em 0
+      margin: 0
       padding-left: 2em
-      ul, ol {margin: 0}
-      li {line-height: 1.5em}
-      li p {margin-bottom: 0}
-      ul > li {list-style: circle}
-      ul > li > *, ol > li > * {margin-top: 0}
+      li {line-height: 1.5em; margin: 0.4em 0}
+      li p {margin: 0}
+      ul > li {list-style: circle; margin: 0}
+      ul > li > *, ol > li > * {margin: 0}
     blockquote
       padding: 0 1em
       color: #6a737d
