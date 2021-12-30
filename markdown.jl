@@ -1,7 +1,8 @@
 @use "github.com" [
   "JunoLab/Atom.jl" => Atom
+  "stevengj/LaTeXStrings.jl" LaTeXString
   "jkroso" [
-    "DOM.jl" => DOM @dom @css_str ["html.jl"]
+    "DOM.jl" => DOM @dom @css_str ["html.jl"] ["latex.jl"]
     "Prospects.jl" flat]]
 import Markdown
 
@@ -9,7 +10,7 @@ renderMD(v::Vector) = @dom[:div map(renderMD, v)...]
 renderMD(s::AbstractString) = @dom[:p parse(MIME("text/html"), s)]
 renderMD(p::Markdown.Paragraph) = @dom[:p map(renderMDinline, flat(p.content))...]
 renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, flat(b.content))...]
-renderMD(l::Markdown.LaTeX) = @dom[:latex class="latex block" block=true Atom.latex2katex(l.formula)]
+renderMD(l::Markdown.LaTeX) = @dom[:latex class="latex block" block=true LaTeXString(l.formula)]
 renderMD(l::Markdown.Link) = @dom[:a href=l.url l.text]
 renderMD(::Markdown.HorizontalRule) = @dom[:hr]
 
@@ -130,4 +131,4 @@ renderMDinline(code::Markdown.Code) =
   @dom[:code class="inline" block=false code.code]
 
 renderMDinline(md::Markdown.LaTeX) =
-  @dom[:latex class="latex inline" block=false Atom.latex2katex(md.formula)]
+  @dom[:latex class="latex inline" block=false LaTeXString(md.formula)]
