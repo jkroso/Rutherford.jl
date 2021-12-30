@@ -10,7 +10,12 @@ renderMD(v::Vector) = @dom[:div map(renderMD, v)...]
 renderMD(s::AbstractString) = @dom[:p parse(MIME("text/html"), s)]
 renderMD(p::Markdown.Paragraph) = @dom[:p map(renderMDinline, flat(p.content))...]
 renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, flat(b.content))...]
-renderMD(l::Markdown.LaTeX) = @dom[:latex class="latex block" block=true LaTeXString(l.formula)]
+renderMD(l::Markdown.LaTeX) = @dom[:latex class="latex block" css"""
+                                                              display: flex
+                                                              align-items: center
+                                                              flex-direction: column
+                                                              margin: 2em 0
+                                                              """ block=true LaTeXString(l.formula)]
 renderMD(l::Markdown.Link) = @dom[:a href=l.url l.text]
 renderMD(::Markdown.HorizontalRule) = @dom[:hr]
 
