@@ -266,6 +266,11 @@ connection.client.ipc.handle("AsyncNode", ({id, value}) => {
   document.getElementById(String(id)).replaceWith(DOM.create(value))
 })
 
+connection.client.ipc.handle("currentfile", () => {
+  const {mod, edpath} = runtime.evaluation._currentContext()
+  return edpath
+})
+
 connection.client.ipc.handle("edit", (src, line, id) => {
   const {editor} = runtime.evaluation._currentContext()
   const result = results[id]
