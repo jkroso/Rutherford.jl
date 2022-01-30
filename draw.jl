@@ -174,7 +174,8 @@ chevron(open) =
              """]
 
 "A summary of a datastructure"
-brief(u::UnionAll) = brief(u.body)
+brief(x::UnionAll) = doodle(x)
+
 brief(data::Union{AbstractDict,AbstractVector,Set,Tuple,NamedTuple}) =
   @dom[:span brief(typeof(data)) [:span css"color: rgb(104, 110, 122)" "[$(length(data))]"]]
 
@@ -233,16 +234,28 @@ header(T::DataType) = begin
   end
 end
 
-brief(t::TypeVar) = @dom[:span repr(t)]
+brief(t::TypeVar) = @dom[:span t.name]
 brief(s::Symbol) = doodle(s)
 
-doodle(x::UnionAll) = doodle(x.body)
+flatten_unionall(x::DataType, vars=[]) = x, vars
+flatten_unionall(x::UnionAll, vars=[]) = flatten_unionall(x.body, push!(vars, x.var))
+doodle(t::TypeVar) = begin
+  t.ub == Any && return @dom[:span t.name]
+  @dom[:span t.name [:span class="syntax--keyword syntax--operator syntax--relation syntax--julia" "<:"] brief(t.ub)]
+end
+header(x::UnionAll) = begin
+  body, vars = flatten_unionall(x)
+  vars = map(doodle, vars)
+  @dom[:span header(body)
+    [:span class="syntax--keyword syntax--other" css"padding: 0 0.5em" "where"]
+    length(vars) == 1 ? vars[1] : @dom[:span "{" interleave(vars, ",")... "}"]]
+end
 
 @component FieldType
 data(ctx::Context{FieldType}) = fieldtype(data(ctx.parent), path(ctx))
 path(c::FieldType) = c.attrs[:name]
 
-doodle(T::DataType) = begin
+doodle(T::Union{DataType,UnionAll}) = begin
   attrs = fields(T)
   isempty(attrs) && return header(T)
   expandable(header(T)) do
@@ -255,23 +268,23 @@ doodle(T::DataType) = begin
           [FieldType name=name]]
         for name in attrs)...]
       expandable(@dom[:h4 "Constructors"]) do
-        name = @dom[:span class="syntax--support syntax--function" string(T.name.name)]
+        name = @dom[:span class="syntax--support syntax--function" unwrap(T).name.name]
         @dom[vstack (render_method(m, name=name) for m in methods(T))...]
       end
       expandable(@dom[:h4 "Instance Methods"]) do
-        ms = methodswith(toUnionAll(T), supertypes=true)
+        ms = methodswith(T)
         isempty(ms) && return @dom[:span "No methods for this type"]
         @dom[vstack map(doodle, ms)...]
       end]
   end
 end
 
+unwrap(u::UnionAll) = unwrap(u.body)
+unwrap(u::DataType) = u
+
 doodle(::Type{T}) where T <: Tuple = brief(T)
 doodle(u::Type{Union{}}) = @dom[:span "Union{}"]
 doodle(u::Union) = brief(u)
-
-toUnionAll(T::DataType) = T.name.wrapper
-toUnionAll(U::UnionAll) = U
 
 doodle(e::Enum) = @dom[:span string(nameof(typeof(e))) "::" string(e)]
 doodle(E::Type{<:Enum}) = @dom[:span string(nameof(E)) "::(" join(map(string, instances(E)), ", ") ")"]
