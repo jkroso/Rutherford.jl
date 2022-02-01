@@ -174,8 +174,6 @@ chevron(open) =
              """]
 
 "A summary of a datastructure"
-brief(x::UnionAll) = doodle(x)
-
 brief(data::Union{AbstractDict,AbstractVector,Set,Tuple,NamedTuple}) =
   @dom[:span brief(typeof(data)) [:span css"color: rgb(104, 110, 122)" "[$(length(data))]"]]
 
@@ -215,13 +213,23 @@ body(data::T) where T = begin
      for (i, field) in enumerate(propertynames(data)))...]
 end
 
-brief(T::DataType) =
+brief(x::UnionAll) = begin
+  body, = flatten_unionall(x)
+  @dom[:span
+    [:span class="syntax--support syntax--type" body.name.name]
+    [:span "{" interleave(map(brief_param, body.parameters), ",")... "}"]]
+end
+brief_param(t::TypeVar) = @dom[:span class="syntax--keyword syntax--operator syntax--relation syntax--julia" "<:" brief(t.ub)]
+brief_param(x) = brief(x)
+
+brief(T::DataType) = begin
   @dom[:span
     [:span class="syntax--support syntax--type" T.name.name]
     if !isempty(T.parameters)
       @dom[:span css"display: inline-flex; flex-direction: row"
         [:span "{"] interleave(map(brief, T.parameters), ",")... [:span "}"]]
     end]
+end
 
 header(T::DataType) = begin
   if supertype(T) ≠ Any
