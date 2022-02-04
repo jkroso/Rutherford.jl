@@ -1,7 +1,8 @@
 @use "github.com" [
   "JunoLab/Atom.jl" => Atom
+  "stevengj/LaTeXStrings.jl" LaTeXString
   "jkroso" [
-    "DOM.jl" => DOM @dom @css_str ["html.jl"]
+    "DOM.jl" => DOM @dom @css_str ["html.jl"] ["latex.jl"]
     "Prospects.jl" flat]]
 import Markdown
 
@@ -9,7 +10,12 @@ renderMD(v::Vector) = @dom[:div map(renderMD, v)...]
 renderMD(s::AbstractString) = @dom[:p parse(MIME("text/html"), s)]
 renderMD(p::Markdown.Paragraph) = @dom[:p map(renderMDinline, flat(p.content))...]
 renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, flat(b.content))...]
-renderMD(l::Markdown.LaTeX) = @dom[:latex class="latex block" block=true Atom.latex2katex(l.formula)]
+renderMD(l::Markdown.LaTeX) = @dom[:latex class="latex block" css"""
+                                                              display: flex
+                                                              align-items: center
+                                                              flex-direction: column
+                                                              margin: 2em 0
+                                                              """ block=true LaTeXString(l.formula)]
 renderMD(l::Markdown.Link) = @dom[:a href=l.url l.text]
 renderMD(::Markdown.HorizontalRule) = @dom[:hr]
 
@@ -21,6 +27,8 @@ highlight(src, language) = begin
   if haskey(ENV, "ATOM_HOME")
     grammer = isempty(language) ? "text.plain" : "source.$language"
     Atom.@rpc highlight((src=src, grammer=grammer, block=true))
+  elseif isempty(language)
+    "<pre>$src</pre>"
   else
     read(pipeline(IOBuffer(src), `pygmentize -f html -O "noclasses" -l $language`), String)
   end
@@ -53,11 +61,12 @@ renderMD(md::Markdown.Admonition) =
 renderMD(md::Markdown.List) =
   DOM.Container{Markdown.isordered(md) ? :ol : :ul}(
     DOM.Attrs(:start=>md.ordered > 1 ? string(md.ordered) : ""),
-    map(renderListItem, flat(md.items)))
+    map(renderListItem, md.items))
 
+renderListItem(v::Vector) = @dom[:li map(renderMDinline, v)...]
 renderListItem(item) = @dom[:li renderMDinline(item)]
 renderListItem(item::Markdown.Paragraph) = begin
-  content = flat(item.content)
+  content = item.content
   first, rest = content[1], content[2:end]
   m = first isa AbstractString ? match(r"^ *\[(x| )\] (.*)", first) : nothing
   if m != nothing
@@ -127,4 +136,4 @@ renderMDinline(code::Markdown.Code) =
   @dom[:code class="inline" block=false code.code]
 
 renderMDinline(md::Markdown.LaTeX) =
-  @dom[:latex class="latex inline" block=false Atom.latex2katex(md.formula)]
+  @dom[:latex class="latex inline" block=false LaTeXString(md.formula)]

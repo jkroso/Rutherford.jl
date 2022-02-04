@@ -13,8 +13,30 @@
 const complete = Atom.handlers["completions"]
 Atom.handle("completions") do data
   mod = Kip.get_module(data["path"], interactive=true)
-  complete(assoc(data, "mod", mod))
+  try
+    complete(assoc(data, "mod", mod))
+  catch end
 end
+const module_handler = Atom.handlers["module"]
+Atom.handle("module") do data
+  ret = module_handler(data)
+  ret.main != "Main" && return ret
+  path = get(data, "path", "")
+  mod = Kip.get_module(path, interactive=true)
+  assoc(ret, :main, string(mod))
+end
+const workspace_handler = Atom.handlers["workspace"]
+Atom.handle("workspace") do mod
+  file = Atom.@rpc currentfile()
+  m = Kip.get_module(file, interactive=true)
+  workspace_handler(string(m))
+end
+const ismodule = Atom.handlers["ismodule"]
+Atom.handle("ismodule") do mod
+  file = Atom.@rpc currentfile()
+  isfile(file) || ismodule(mod)
+end
+
 Atom.getmodule(m::Module) = m
 Atom.getmodule(s::AbstractString) = begin
   s = replace(s, r"…$"=>"") # if the name is long it will be elided
