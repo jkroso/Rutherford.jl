@@ -38,6 +38,7 @@ spacer(attrs, children) = begin
 end
 
 syntax(x) = @dom[:span class="syntax--language syntax--julia" class=syntax_class(x) repr(x)]
+syntax(s::Symbol) = @dom[:span string(s)]
 syntax_class(::Bool) = ["syntax--constant", "syntax--boolean"]
 syntax_class(::Number) = ["syntax--constant", "syntax--numeric"]
 syntax_class(::AbstractString) = ["syntax--string", "syntax--quoted", "syntax--double"]
@@ -87,53 +88,6 @@ fraction(r::Rational) =
     doodle(r.num) doodle(r.den)]
 
 brief(m::Module) = @dom[:span class="syntax--keyword syntax--other" replace(repr(m), r"^Main\."=>"")]
-
-getfile(m::Module) = begin
-  if pathof(m) != nothing
-    return pathof(m)
-  end
-  for (file, mod) in Kip.modules
-    mod === m && return file
-  end
-end
-
-issubmodule(m::Module) = parentmodule(m) != m && parentmodule(m) != Main
-getreadme(::Nothing) = nothing
-getreadme(file::AbstractString) = begin
-  dir = dirname(file)
-  path = joinpath(dir, "Readme.md")
-  isfile(path) && return path
-  basename(dir) == "src" || return nothing
-  path = joinpath(dirname(dir), "Readme.md")
-  isfile(path) && return path
-  nothing
-end
-
-doodle(m::Module) = begin
-  readme = nothing
-  header = if issubmodule(m)
-    brief(m)
-  else
-    file = getfile(m)
-    readme = getreadme(file)
-    @dom[:span brief(m) " from " stacklink(file, 0)]
-  end
-  expandable(header) do
-    @dom[vstack css"max-width: 1000px"
-      if readme != nothing
-        expandable(@dom[:h3 "Readme.md"]) do
-          @dom[:div css"margin-bottom: 20px" drawMDFile(readme)]
-        end
-      end
-      (@dom[hstack
-        [:span String(name)]
-        [:span css"padding: 0 10px" "→"]
-        isdefined(m, name) ? doodle(getfield(m, name)) : fade("#undef")]
-      for name in names(m, all=true) if !occursin('#', String(name)) && name != nameof(m))...]
-  end
-end
-
-drawMDFile(path) = resolveLinks(doodle(Markdown.parse_file(path, flavor=Markdown.github)), dirname(path))
 
 resolveLinks(c::DOM.Node, dir) = c
 resolveLinks(c::DOM.Container, dir) = assoc(c, :children, map(c->resolveLinks(c, dir), c.children))
