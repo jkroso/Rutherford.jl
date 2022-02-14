@@ -38,7 +38,7 @@ spacer(attrs, children) = begin
 end
 
 syntax(x) = @dom[:span class="syntax--language syntax--julia" class=syntax_class(x) repr(x)]
-syntax(s::Symbol) = @dom[:span string(s)]
+syntax(x::Symbol) = @dom[:span class="syntax--language syntax--julia" class=syntax_class(x) x]
 syntax_class(::Bool) = ["syntax--constant", "syntax--boolean"]
 syntax_class(::Number) = ["syntax--constant", "syntax--numeric"]
 syntax_class(::AbstractString) = ["syntax--string", "syntax--quoted", "syntax--double"]
@@ -58,14 +58,15 @@ doodle(d::Dates.Date) = @dom[:span Dates.format(d, Dates.dateformat"dd U Y")]
 doodle(d::Dates.DateTime) = @dom[:span Dates.format(d, Dates.dateformat"dd/mm/Y H\h M\m S.s\s")]
 doodle(d::Dates.Time) = @dom[:span Dates.format(d, Dates.dateformat"HH:MM:S.s")]
 
-doodle(s::AbstractString) =
-  if occursin(r"\n", s)
+doodle(s::AbstractString) = begin
+  if occursin('\n', s)
     @dom[vstack class="syntax--string syntax--quoted syntax--triple syntax--double syntax--julia"
       [:span "\"\"\""]
       [:span css"white-space: pre" s "\"\"\""]]
   else
     syntax(s)
   end
+end
 
 doodle(r::Rational) = begin
   whole, part = divrem(r.num, r.den)

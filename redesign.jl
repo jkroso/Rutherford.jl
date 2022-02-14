@@ -1,17 +1,19 @@
+@use "github.com/JuliaCollections/OrderedCollections.jl" LittleDict
 @use "github.com/jkroso/Prospects.jl" @mutable @abstract @struct Field assoc group interleave
-@use "github.com" [
-  "MikeInnes/MacroTools.jl" => MacroTools @capture @match
-  "jkroso" [
-    "DOM.jl" => DOM @dom @css_str ["Events.jl" => Events]
-    "Promises.jl" need pending]
-  "JunoLab/Atom.jl" => Atom]
+@use "github.com/MikeInnes/MacroTools.jl" => MacroTools @capture @match
+@use "github.com/JunoLab/Atom.jl" => Atom
 @use "./draw.jl" doodle vstack hstack chevron brief syntax literal stacklink resolveLinks
+@use "github.com/JuliaIO/JSON.jl" => JSON
+@use "github.com/jkroso/write-json.jl" json
+@use "github.com/jkroso/Promises.jl" Promise Deferred need pending @defer
+@use "github.com/jkroso/DOM.jl" => DOM @dom @css_str ["Events.jl" => Events]
+@use "github.com/jkroso/Units.jl" mm
+@use "github.com/jkroso/Units.jl/Typography" pt
+using InteractiveUtils
 import Markdown
 
 msg(x; kwargs...) = msg(x, kwargs)
-msg(x::String, args...) = if Atom.isactive(Atom.sock)
-  println(Atom.sock, repr(MIME("application/json"), [x, args...]))
-end
+msg(x::String, args...) = Atom.isactive(Atom.sock) && println(Atom.sock, json([x, args...]))
 
 const evallock = ReentrantLock()
 const eventlock = ReentrantLock()
@@ -31,6 +33,21 @@ toDOM(hs::HStack) = @dom[hstack hs.children...]
 toDOM(vs::VStack) = @dom[vstack vs.children...]
 @mutable Text(value) <: UINode
 toDOM(t::Text) = @dom[:span t.value]
+Base.convert(::Type{UINode}, str::String) = Text(str)
+@mutable Heading(level::UInt8) <: UINode
+toDOM(ui::Heading) = begin
+  h = DOM.Container{Symbol('h', ui.level)}
+  @dom[h ui.children...]
+end
+@mutable Padding(top=0mm, right=0mm, bottom=0mm, left=0mm) <: UINode
+toDOM(ui::Padding) = begin
+  @dom[:div style.paddingTop=string(convert(pt, ui.top))
+            style.paddingRight=string(convert(pt, ui.right))
+            style.paddingLeft=string(convert(pt, ui.left))
+            style.paddingBottom=string(convert(pt, ui.bottom))
+            style.background=get(ui.attrs, :background, "inherit")
+            style.borderRadius=string(convert(pt, get(ui.attrs, :borderRadius, 2mm))) ui.children...]
+end
 
 @abstract struct LazyNode <: UINode end
 Base.getproperty(ui::LazyNode, f::Field{:firstchild}) = begin
@@ -71,10 +88,8 @@ Base.convert(::Type{DOM.Node}, d::DocumentNode) = convert(DOM.Node, d.firstchild
 const stop = Ref{Bool}(false)
 
 emit(d::InlineResult, e) = begin
-  lock(eventlock) do
-    stop[] = false
-    emit(d, e, 1)
-  end
+  stop[] = false
+  emit(d, e, 1)
 end
 emit(d::InlineResult, e, i) = begin
   id = str_id(d.ui.firstchild)
@@ -90,7 +105,6 @@ emit(d::DOM.Container, e, i) = begin
     emit(child, e, i + 1)
   end
   stop[] && return nothing
-  # haskey(d.attrs, :onmousedown) && @show keys(d.attrs)
   fn = get(d.attrs, Events.name(e), nothing)
   isnothing(fn) || fn(e)
   nothing
@@ -116,8 +130,12 @@ ui_macro(x::Any) = esc(x)
 ui_macro(expr::String) = :(Text($expr))
 ui_macro(expr::Expr) = begin
   if expr.head in (:hcat, :vcat, :array, :vect)
-    this = tocall(expr.args[1])
-    attrs, children = group(isattr, @view expr.args[2:end])
+    args = expr.args
+    if Meta.isexpr(args[1], :row)
+      args = [args[1].args..., args[2:end]...]
+    end
+    this = tocall(args[1])
+    attrs, children = group(isattr, @view args[2:end])
     children = map(ui_macro, children)
     if !isempty(attrs)
       this.args[end-4] = attr_expression(attrs)
@@ -127,24 +145,38 @@ ui_macro(expr::Expr) = begin
     esc(expr)
   end
 end
+normalize_attr(e) = begin
+  @match e begin
+    (a_.b_ = c_) => :($(QuoteNode(a)) => $(QuoteNode(b)) => $(esc(c)))
+    ((:a_|a_) = b_) => :($(QuoteNode(a)) => $(esc(b)))
+    (s_Symbol) => :($(QuoteNode(s)) => $(esc(s)))
+    _ => esc(e)
+  end
+end
+Attrs(attrs::Pair...) = reduce(add_attr!, attrs, init=LittleDict{Symbol,Any}())
 
 tocall(s::Symbol) = Expr(:call, esc(s), empty_attrs, nothing, nothing, nothing, nothing)
 tocall(s::Expr) = begin
-  @assert Meta.isexpr(s, :call)
+  @assert Meta.isexpr(s, :call) repr(s)
   args = s.args[2:end]
   Expr(:call, esc(s.args[1]), map(esc, args)..., empty_attrs, nothing, nothing, nothing, nothing)
 end
-isattr(e) = @capture(e, (_ = _) | (_ => _))
+isattr(e) = @capture(e, (_ = _))
 normalize_attr(e) =
   @match e begin
     ((:a_|a_) = b_) => :($(QuoteNode(a)) => $(esc(b)))
     (s_Symbol) => :($(QuoteNode(s)) => $(esc(s)))
     _ => esc(e)
   end
+add_attr!(d::AbstractDict, (key,value)::Pair{Symbol,<:Pair}) = push!(get!(LittleDict{Symbol,Any}, d, key), value)
+add_attr!(d::AbstractDict, (key,value)::Pair) = (d[key] = value; d)
+attr_expression(attrs) = :(Attrs($(map(normalize_attr, attrs)...)))
 
 tree(node, children...) = begin
   prev_sibling = nothing
   for child in children
+    isnothing(child) && continue
+    child = convert(UINode, child)
     child.parent = node
     if isnothing(prev_sibling)
       node.firstchild = child
@@ -185,17 +217,18 @@ uncache(x::UINode) = delete!(cache, str_id(x))
 Base.convert(::Type{DOM.Node}, ui::UINode) = begin
   dom = toDOM(ui)
   id = str_id(ui)
-  dom = assoc(dom, :attrs, assoc(dom.attrs, :id, id))
-  finalizer(uncache, ui)
-  cache[id] = dom
+  if !haskey(dom.attrs, :id)
+    dom = assoc(dom, :attrs, assoc(dom.attrs, :id, id))
+    finalizer(uncache, ui)
+    cache[id] = dom
+  end
+  dom
 end
 
 redraw(ui::UINode) = begin
   id = str_id(ui)
   old = cache[id]
-  new = toDOM(ui)
-  new = assoc(new, :attrs, assoc(new.attrs, :id, id))
-  cache[id] = new
+  new = convert(DOM.Node, ui)
   patch = DOM.diff(old, new)
   if !isnothing(patch)
     msg("patchnode", (node=id, patch=patch))
@@ -211,7 +244,7 @@ tick(ui::UINode) = foreach(tick, ui.children)
 """
 Takes some data and generates a user interface for viewing and manipulating it
 """
-createUI(data) = StaticView(data)
+createUI(data) = isbits(data) ? StaticView(data) : Expandable(data)
 
 @mutable StaticView(data) <: UINode
 toDOM(ui::StaticView) = doodle(ui.data)
@@ -221,50 +254,54 @@ toDOM(ui::BriefView) = brief(ui.data)
 toDOM(ui::SyntaxView) = syntax(ui.expr)
 
 @abstract struct AbstractExpandable <: LazyNode
-  data::Any
   isopen::Bool=false
 end
-
-@mutable Expandable <: AbstractExpandable
-children(ui::AbstractExpandable) = UINode[header(ui), RestNode()]
-header(ui::AbstractExpandable) = header(ui.data)
-header(data) = BriefView(data)
-body(ui::AbstractExpandable) = body(ui.data)
+children(ui::AbstractExpandable) = (header(ui), convert(UINode, @defer body(ui)))
 toDOM(ui::AbstractExpandable) = begin
   isopen = ui.isopen
   onmousedown(_) = begin
-    # @show typeof(ui), isopen, objectid(ui)
     ui.isopen = !isopen
     redraw(ui)
   end
   @dom[vstack
     [hstack{onmousedown} hi=true css"align-items: center" chevron(isopen) ui.firstchild]
     [vstack style.height=isopen ? "auto" : "0px"
-            css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px" (isopen ? ui.children[2:end] : [])...]]
+            css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px" isopen ? ui.children[2] : nothing]]
 end
 
-@mutable RestNode <: UINode
-toDOM(ui::RestNode) = convert(DOM.Node, ui.firstchild)
-Base.getproperty(ui::RestNode, f::Field{:nextsibling}) = begin
-  child = getfield(ui, :firstchild)
-  isnothing(child) || return child.nextsibling
-  children = body(ui.parent)
-  isempty(children) && return nothing
-  tree(ui, children...)
-  ui.firstchild.nextsibling
+@mutable DeferredNode(promise::Promise) <: UINode
+Base.convert(::Type{UINode}, p::Promise) = DeferredNode(p)
+toDOM(ui::DeferredNode) = convert(DOM.Node, ui.firstchild)
+Base.getproperty(ui::DeferredNode, f::Field{:firstchild}) = begin
+  if ui.promise.state == pending
+    tree(ui, need(ui.promise))
+  end
+  getfield(ui, :firstchild)
 end
 
-createUI(dict::AbstractDict) = @ui[Expandable(dict, false)]
-body(dict::AbstractDict) = UINode[@ui[DictEntry(kv) createUI(kv[1]) createUI(kv[2])] for kv in dict]
-@mutable DictEntry(kv::Pair) <: UINode
-toDOM(ui::DictEntry) = begin
-  key, value = ui.children
-  @dom[hstack key " → " value]
+@mutable Expando(fn, header) <: AbstractExpandable
+header(ui::Expando) = ui.header
+body(ui::Expando) = ui.fn()
+
+@mutable Expandable(data::Any) <: AbstractExpandable
+header(ui::Expandable) = header(ui.data)
+header(data) = BriefView(data)
+body(ui::Expandable) = body(ui.data)
+body(data::T) where T = begin
+  @ui[VStack
+    (@ui[HStack
+      string(field)
+      [Padding(0mm, 2mm, 0mm, 2mm) "→"]
+      hasproperty(data, field) ? createUI(getproperty(data, field)) : "#undef"]
+    for field in propertynames(data))...]
 end
+
+createUI(dict::AbstractDict) = isempty(dict) ? BriefView(dict) : @ui[Expandable(dict, false)]
+body(dict::AbstractDict) = @ui[VStack (createUI(kv) for kv in dict)...]
 
 createUI(tuple::NamedTuple) = begin
   @ui[NamedTupleView(tuple, false)
-    (@ui[NamedTupleEntry(kv) SyntaxView(kv[1]) createUI(kv[2])]
+    (@ui[NamedTupleEntry(kv) string(kv[1]) createUI(kv[2])]
      for kv in pairs(tuple))...]
 end
 @mutable NamedTupleView(nt, isopen=false) <: UINode
@@ -298,34 +335,29 @@ toDOM(ui::NamedTupleEntry) = begin
 end
 
 createUI(fn::Function) = Expandable(fn, false)
-body(fn::Function) = UINode[DocumentationView(fn), Expandable(methods(fn), false)]
+body(fn::Function) = @ui[VStack DocumentationView(fn) Expandable(methods(fn), false)]
 @mutable DocumentationView(obj) <: UINode
 toDOM(ui::DocumentationView) = Atom.CodeTools.hasdoc(ui.obj) ? doodle(Base.doc(ui.obj)) : @dom[:span]
-body(ml::Base.MethodList) = UINode[@ui[StaticView(m)] for m in ml]
+body(ml::Base.MethodList) = @ui[VStack (@ui[StaticView(m)] for m in ml)...]
 
 @mutable Link(file::Union{String,Nothing}, line::Int) <: UINode
 toDOM(ui::Link) = stacklink(ui.file, ui.line)
 
 createUI(m::Module) = Expandable(m, false)
 header(m::Module) = @ui[HStack BriefView(m) " from " Link(getfile(m), 0)]
+body(m::Module) = begin
+  readme = getfile(m)
+  @ui[VStack
+    isnothing(readme) ? nothing : Expando(()->MDFile(getreadme(readme)), @ui[Heading(4) "Readme.md"])
+    (@ui[ModuleField(m, name) SyntaxView(name) createUI(getfield(m, name))]
+     for name in names(m, all=true) if !occursin('#', String(name)) && name != nameof(m))...]
+end
 @mutable ModuleField(mod, name) <: UINode
 toDOM(ui::ModuleField) = begin
   name, value = ui.children
   @dom[hstack name [:span css"padding: 0 10px" "→"] value]
 end
-body(m::Module) = begin
-  readme = getfile(m)
-  view = isnothing(readme) ? UINode[] : UINode[ReadmeView(readme, true)]
-  # push!(view, (@ui[ModuleField(m, name) SyntaxView(name) createUI(getfield(m, name))]
-  #              for name in names(m, all=true) if !occursin('#', String(name)) && name != nameof(m))...)
-end
-
-@mutable ReadmeView <: AbstractExpandable
-header(ui::ReadmeView) = @ui[HStack "Readme.md"]
-body(ui::ReadmeView) = [MDFile(getreadme(ui.data))]
-@mutable MDFile(path) <: UINode
-toDOM(ui::MDFile) = resolveLinks(doodle(Markdown.parse_file(ui.path, flavor=Markdown.github)), dirname(ui.path))
-
+issubmodule(m::Module) = parentmodule(m) != m && parentmodule(m) != Main
 getfile(m::Module) = begin
   if pathof(m) != nothing
     return pathof(m)
@@ -334,7 +366,6 @@ getfile(m::Module) = begin
     mod === m && return file
   end
 end
-issubmodule(m::Module) = parentmodule(m) != m && parentmodule(m) != Main
 getreadme(m::Module) = getreadme(getfile(m))
 getreadme(::Nothing) = nothing
 getreadme(file::AbstractString) = begin
@@ -347,8 +378,59 @@ getreadme(file::AbstractString) = begin
   nothing
 end
 
+@mutable MDFile(path) <: UINode
+toDOM(ui::MDFile) = resolveLinks(doodle(Markdown.parse_file(ui.path, flavor=Markdown.github)), dirname(ui.path))
+
+const AnyDataType = Union{DataType,UnionAll}
+fields(T) = try fieldnames(T) catch; () end
+createUI(T::AnyDataType) = begin
+  attrs = fields(T)
+  isempty(attrs) ? header(T) : Expandable(T, false)
+end
+header(T::AnyDataType) = begin
+  supertype(T) === Any && return BriefView(T)
+  @ui[HStack BriefView(T) " <: " BriefView(supertype(T))]
+end
+body(T::AnyDataType) = begin
+  attrs = fields(T)
+  @ui[VStack
+    Atom.CodeTools.hasdoc(T) ? DocumentationView(Base.doc(T)) : nothing
+    [Padding(2mm, 0mm, 0mm, 0mm)]
+    [Padding(2mm, 5mm, 2mm, 5mm) background="white" borderRadius=1.5mm
+      [VStack
+        (@ui[HStack String(name) "::" BriefView(fieldtype(T, name))] for name in attrs)...]]
+    Expando(@ui[Heading(4) "Constructors"]) do
+      @ui[VStack (StaticView(m) for m in methods(T))...]
+    end
+    Expando(@ui[Heading(4) "Instance Methods"]) do
+      ms = methodswith(T)
+      if isempty(ms)
+        @ui[HStack "No methods for this type"]
+      else
+        @ui[VStack (StaticView(m) for m in ms)...]
+      end
+    end]
+end
+
+createUI(s::AbstractString) = SyntaxView(s)
+createUI(s::Symbol) = SyntaxView(s)
+createUI(n::Number) = StaticView(n)
+createUI(p::Pair) = @ui[HStack createUI(p.first) [Padding(0mm,2mm,0mm,2mm) "=>"] createUI(p.second)]
+
 Dict(:a=>1,:b=>Dict(:c=>3))
 (a=1,b=(c=3,),c=3,d=4,e=5,f=6,g=7)
 (a=1,b=(c=3,),d=4)
 identity
-@use "github.com/jkroso/Prospects.jl" @mutable @abstract @struct Field assoc group interleave
+@use "github.com/jkroso/Prospects.jl"
+Rational
+Int
+AnyDataType
+HStack()
+:a=>1
+"a"
+1//3
+1
+@ui[Padding(1mm, 1mm,1mm,1mm) background="white"
+                              color="red"
+  [VStack]
+  "Constructors"]
