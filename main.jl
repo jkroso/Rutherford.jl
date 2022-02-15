@@ -2,7 +2,6 @@
 @use "github.com" [
   "MikeInnes/MacroTools.jl" => MacroTools @match
   "jkroso" [
-    "DOM.jl/Events.jl" => Events
     "Prospects.jl" assoc
     "Destructure.jl" @destruct]
   "JunoLab/Atom.jl" => Atom
@@ -49,23 +48,9 @@ Atom.getmodule(s::AbstractString) = begin
   end
 end
 
-const event_parsers = Dict{String,Function}(
-  "mousedown" => d-> Events.MouseDown(d["path"], Events.MouseButton(d["button"]), map(round, d["position"])...),
-  "mouseup" => d-> Events.MouseUp(d["path"], Events.MouseButton(d["button"]), map(round, d["position"])...),
-  "mouseover" => d-> Events.MouseOver(d["path"]),
-  "mouseout" => d-> Events.MouseOut(d["path"]),
-  "click" => d-> Events.Click(d["path"], Events.MouseButton(d["button"]), map(round, d["position"])...),
-  "dblclick" => d-> Events.DoubleClick(d["path"], Events.MouseButton(d["button"]), map(round, d["position"])...),
-  "mousemove" => d-> Events.MouseMove(d["path"], map(round, d["position"])...),
-  "keydown" => d-> Events.KeyDown(UInt8[], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
-  "keyup" => d-> Events.KeyUp(UInt8[], d["key"], Set{Symbol}(map(Symbol, d["modifiers"]))),
-  "resize" => d-> Events.Resize(d["width"], d["height"]),
-  "scroll" => d-> Events.Scroll(d["path"], map(round, d["position"])...))
-
 Atom.handle("event") do id, data
-  event = event_parsers[data["type"]](data)
   if haskey(inline_displays, id)
-    res = Atom.@errs emit(inline_displays[id], event)
+    res = Atom.@errs emit(inline_displays[id], data)
     res isa Atom.EvalError && showerror(IOContext(stderr, :limit => true), res)
   end
   nothing

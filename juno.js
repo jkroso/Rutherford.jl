@@ -59,17 +59,23 @@ const modifiers = (e) => {
 
 const mouse_button_event = (e, top_node) => ({
   type: e.type,
-  path: dom_path(e.target, top_node),
+  target: target_id(e.target, top_node),
   button: e.button,
   position: [e.x, e.y]
 })
 
 const mouse_hover_event = (e, top_node) => ({
   type: e.type,
-  path: dom_path(e.target, top_node)
+  target: target_id(e.target, top_node)
 })
 
-const dom_path = (dom, top_node) => top_node.contains(dom) ? DOM.dom_path(dom, top_node) : []
+const target_id = (target, top_node) => {
+  while (!target.hasAttribute("id")) {
+    if (target === top_node) throw Error("No nodes have an ID")
+    target = target.parentNode
+  }
+  target.getAttribute("id")
+}
 
 const event_converters = {
   click: mouse_button_event,
@@ -88,14 +94,14 @@ const event_converters = {
   scroll(e, top_node) {
     return {
       type: "scroll",
-      path: dom_path(e.target, top_node),
+      target: target_id(e.target, top_node),
       position: [window.scrollX, window.scrollY]
     }
   },
   mousemove(e, top_node) {
     return {
       type: "mousemove",
-      path: dom_path(e.target, top_node),
+      target: target_id(e.target, top_node),
       position: [e.x, e.y]
     }
   }

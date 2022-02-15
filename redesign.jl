@@ -84,31 +84,44 @@ end
 @mutable DocumentNode(device::InlineResult) <: UINode
 Base.convert(::Type{DOM.Node}, d::DocumentNode) = convert(DOM.Node, d.firstchild)
 
-"used to tell emit() to stop recursion"
-const stop = Ref{Bool}(false)
+emit(d::InlineResult, event::AbstractDict) = emit(d, parse_event(event))
 
-emit(d::InlineResult, e) = begin
-  stop[] = false
-  emit(d, e, 1)
+parse_event(event::AbstractDict) = event_parsers[event["type"]](event)
+get_target(event::AbstractDict) = begin
+  id = event["target"]
+  @assert haskey(id_ui, id) "event emited on an unknown UINode id=$id"
+  id_ui[id]
 end
-emit(d::InlineResult, e, i) = begin
-  id = str_id(d.ui.firstchild)
-  haskey(cache, id) && emit(cache[id], e, i)
-end
-emit(d::DOM.Container, e, i) = begin
-  if haskey(d.attrs, :id)
-    d = cache[d.attrs[:id]]
-  end
-  path = Events.path(e)
-  if length(path) >= i
-    child = d.children[path[i]]
-    emit(child, e, i + 1)
-  end
-  stop[] && return nothing
-  fn = get(d.attrs, Events.name(e), nothing)
-  isnothing(fn) || fn(e)
-  nothing
-end
+
+const event_parsers = Dict{String,Function}(
+  "keydown" => KeyboardEvent{:down},
+  "keyup" => KeyboardEvent{:up},
+  "keypress" => KeyboardEvent{:press},
+  "mousedown" => MouseButtonEvent{:down},
+  "mouseup" => MouseButtonEvent{:up},
+  "mousemove" => MouseEvent,
+  "mouseover" => MouseHoverEvent{:over},
+  "mouseout" => MouseHoverEvent{:out},
+  "click" => MouseButtonEvent{:click},
+  "dblclick" => MouseButtonEvent{:dblclick},
+  "scroll" => ScrollEvent)
+
+@struct KeyBoardEvent{type}(key::UInt8, modifiers::Set{Symbol}) <: Event
+KeyBoardEvent{t}(e::AbstractDict) where t = KeyBoardEvent{t}(e["key"], Set{Symbol}(map(Symbol, e["modifiers"])))
+
+@enum MouseButton left middle right
+@abstract struct MouseEvent <: Event target::UINode end
+@struct MouseButtonEvent{type}(button::MouseButton, position::Tuple) <: MouseEvent
+MouseButtonEvent{t}(e::AbstractDict) where t = MouseButtonEvent{t}(MouseButton(d["button"]),
+                                                                   tuple(map(round, d["position"])...),
+                                                                   get_target(e))
+
+@struct MouseHoverEvent{type} <: MouseEvent
+MouseHoverEvent{t}(e::AbstractDict) where t = MosueHoverEvent{t}(get_target(e))
+
+@struct MouseMoveEvent{type}(position::Tuple) <: MouseEvent
+MouseMoveEvent{t}(e::AbstractDict) where t = MouseMoveEvent{t}(tuple(map(round, d["position"])...), get_target(e))
+
 
 Base.display(d::InlineResult, view::DOM.Node) = begin
   state = d.error ? :error : :ok
@@ -211,8 +224,12 @@ Base.getindex(c::ChildNodes, i::Integer) = begin
 end
 
 str_id(x) = string(objectid(x), base=62)
-const cache = Dict{String,DOM.Node}()
-uncache(x::UINode) = delete!(cache, str_id(x))
+const ui_dom = IdDict{UINode,DOM.Node}()
+const id_ui = Dict{String,UINode}()
+uncache(x::UINode) = begin
+  delete!(ui_dom, x)
+  delete!(id_ui, str_id(x))
+end
 
 Base.convert(::Type{DOM.Node}, ui::UINode) = begin
   dom = toDOM(ui)
@@ -220,19 +237,18 @@ Base.convert(::Type{DOM.Node}, ui::UINode) = begin
   if !haskey(dom.attrs, :id)
     dom = assoc(dom, :attrs, assoc(dom.attrs, :id, id))
     finalizer(uncache, ui)
-    cache[id] = dom
+    ui_dom[ui] = dom
+    id_ui[id] = ui
   end
   dom
 end
 
 redraw(ui::UINode) = begin
-  id = str_id(ui)
-  old = cache[id]
+  old = ui_dom[ui]
   new = convert(DOM.Node, ui)
   patch = DOM.diff(old, new)
-  if !isnothing(patch)
-    msg("patchnode", (node=id, patch=patch))
-  end
+  isnothing(patch) || msg("patchnode", (node=str_id(ui), patch=patch))
+  nothing
 end
 
 """
@@ -258,15 +274,14 @@ toDOM(ui::SyntaxView) = syntax(ui.expr)
 end
 children(ui::AbstractExpandable) = (header(ui), convert(UINode, @defer body(ui)))
 toDOM(ui::AbstractExpandable) = begin
-  isopen = ui.isopen
-  onmousedown(_) = begin
-    ui.isopen = !isopen
-    redraw(ui)
-  end
   @dom[vstack
-    [hstack{onmousedown} hi=true css"align-items: center" chevron(isopen) ui.firstchild]
-    [vstack style.height=isopen ? "auto" : "0px"
-            css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px" isopen ? ui.children[2] : nothing]]
+    [hstack css"align-items: center" chevron(ui.isopen) ui.firstchild]
+    [vstack style.height=ui.isopen ? "auto" : "0px"
+            css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px" ui.isopen ? ui.children[2] : nothing]]
+end
+onmousedown(ui::AbstractExpandable, e::Event) = begin
+  ui.isopen = !ui.isopen
+  redraw(ui)
 end
 
 @mutable DeferredNode(promise::Promise) <: UINode
