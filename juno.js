@@ -70,11 +70,8 @@ const mouse_hover_event = (e, top_node) => ({
 })
 
 const target_id = (target, top_node) => {
-  while (!target.hasAttribute("id")) {
-    if (target === top_node) throw Error("No nodes have an ID")
-    target = target.parentNode
-  }
-  target.getAttribute("id")
+  while (!target.hasAttribute("id") && target !== top_node) target = target.parentNode
+  return target.getAttribute("id") || ""
 }
 
 const event_converters = {
@@ -246,7 +243,7 @@ connection.client.ipc.handle("render", ({state, dom, id}) => {
   }, true)
 
   const sendEvent = (e) => {
-    connection.client.ipc.msg("event", id, eventJSON(e, top_node.lastChild))
+    connection.client.ipc.msg("event", id, eventJSON(e, top_node))
     e.preventDefault()
     e.stopPropagation()
   }

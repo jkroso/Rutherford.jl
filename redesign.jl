@@ -6,7 +6,7 @@
 @use "github.com/JuliaIO/JSON.jl" => JSON
 @use "github.com/jkroso/write-json.jl" json
 @use "github.com/jkroso/Promises.jl" Promise Deferred need pending @defer
-@use "github.com/jkroso/DOM.jl" => DOM @dom @css_str ["Events.jl" => Events]
+@use "github.com/jkroso/DOM.jl" => DOM @dom @css_str
 @use "github.com/jkroso/Units.jl" mm
 @use "github.com/jkroso/Units.jl/Typography" pt
 using InteractiveUtils
@@ -16,10 +16,8 @@ msg(x; kwargs...) = msg(x, kwargs)
 msg(x::String, args...) = Atom.isactive(Atom.sock) && println(Atom.sock, json([x, args...]))
 
 const evallock = ReentrantLock()
-const eventlock = ReentrantLock()
 const empty_attrs = Base.ImmutableDict{Symbol,Any}()
 
-@abstract struct Event end
 @abstract struct UINode
   attrs::AbstractDict{Symbol,Any}=empty_attrs
   parent::Union{Nothing, UINode}=nothing
@@ -28,7 +26,7 @@ const empty_attrs = Base.ImmutableDict{Symbol,Any}()
   firstchild::Union{Nothing, UINode}=nothing
 end
 @mutable HStack <: UINode
-toDOM(hs::HStack) = @dom[hstack hs.children...]
+toDOM(hs::HStack) = @dom[hstack css"align-items: center" hs.children...]
 @mutable VStack <: UINode
 toDOM(vs::VStack) = @dom[vstack vs.children...]
 @mutable Text(value) <: UINode
@@ -84,44 +82,76 @@ end
 @mutable DocumentNode(device::InlineResult) <: UINode
 Base.convert(::Type{DOM.Node}, d::DocumentNode) = convert(DOM.Node, d.firstchild)
 
-emit(d::InlineResult, event::AbstractDict) = emit(d, parse_event(event))
-
-parse_event(event::AbstractDict) = event_parsers[event["type"]](event)
-get_target(event::AbstractDict) = begin
-  id = event["target"]
-  @assert haskey(id_ui, id) "event emited on an unknown UINode id=$id"
-  id_ui[id]
+emit(d::InlineResult, event::AbstractDict) = begin
+  try
+    emit(d, parse_event(d, event))
+  catch e
+    flush(stderr) # so error messages don't get mixed up
+    rethrow(e)
+  end
 end
 
-const event_parsers = Dict{String,Function}(
+parse_event(d::InlineResult, event::AbstractDict) = event_parsers[event["type"]](d, event)
+get_target(d::InlineResult, event::AbstractDict) = get(id_ui, event["target"], d.ui.firstchild)
+
+@abstract struct Event end
+@struct KeyboardEvent{type}(key::String, modifiers::Set{Symbol}) <: Event
+KeyboardEvent{t}(::InlineResult, e::AbstractDict) where t = begin
+  KeyboardEvent{t}(e["key"], Set{Symbol}(map(Symbol, e["modifiers"])))
+end
+
+@enum MouseButton left middle right
+@abstract struct MouseEvent <: Event
+  target::UINode
+end
+@struct MouseButtonEvent{type}(button::MouseButton, position::Tuple) <: MouseEvent
+MouseButtonEvent{t}(d::InlineResult, e::AbstractDict) where t = begin
+  MouseButtonEvent{t}(MouseButton(e["button"]), tuple(map(round, e["position"])...), get_target(d, e))
+end
+
+@struct MouseHoverEvent{type} <: MouseEvent
+MouseHoverEvent{t}(d::InlineResult, e::AbstractDict) where t = MouseHoverEvent{t}(get_target(d, e))
+
+@struct MouseMoveEvent(position::Tuple) <: MouseEvent
+MouseMoveEvent(d::InlineResult, e::AbstractDict) = begin
+  MouseMoveEvent(tuple(map(round, e["position"])...), get_target(d, e))
+end
+
+@struct ScrollEvent(position::Tuple) <: MouseEvent
+ScrollEvent(d::InlineResult, e::AbstractDict) = ScrollEvent(tuple(map(round, e["position"])...), get_target(d, e))
+
+const event_parsers = Dict{String,DataType}(
   "keydown" => KeyboardEvent{:down},
   "keyup" => KeyboardEvent{:up},
   "keypress" => KeyboardEvent{:press},
   "mousedown" => MouseButtonEvent{:down},
   "mouseup" => MouseButtonEvent{:up},
-  "mousemove" => MouseEvent,
+  "mousemove" => MouseMoveEvent,
   "mouseover" => MouseHoverEvent{:over},
   "mouseout" => MouseHoverEvent{:out},
   "click" => MouseButtonEvent{:click},
   "dblclick" => MouseButtonEvent{:dblclick},
   "scroll" => ScrollEvent)
 
-@struct KeyBoardEvent{type}(key::UInt8, modifiers::Set{Symbol}) <: Event
-KeyBoardEvent{t}(e::AbstractDict) where t = KeyBoardEvent{t}(e["key"], Set{Symbol}(map(Symbol, e["modifiers"])))
+for (e,T) in event_parsers
+  name = Symbol("on", e)
+  @eval function $name(ui, e) end
+  @eval handler_for(::$T) = $name
+end
 
-@enum MouseButton left middle right
-@abstract struct MouseEvent <: Event target::UINode end
-@struct MouseButtonEvent{type}(button::MouseButton, position::Tuple) <: MouseEvent
-MouseButtonEvent{t}(e::AbstractDict) where t = MouseButtonEvent{t}(MouseButton(d["button"]),
-                                                                   tuple(map(round, d["position"])...),
-                                                                   get_target(e))
-
-@struct MouseHoverEvent{type} <: MouseEvent
-MouseHoverEvent{t}(e::AbstractDict) where t = MosueHoverEvent{t}(get_target(e))
-
-@struct MouseMoveEvent{type}(position::Tuple) <: MouseEvent
-MouseMoveEvent{t}(e::AbstractDict) where t = MouseMoveEvent{t}(tuple(map(round, d["position"])...), get_target(e))
-
+emit(d::InlineResult, event::Event) = nothing
+emit(d::InlineResult, event::KeyboardEvent) = begin
+  @show event
+end
+emit(d::InlineResult, event::MouseEvent) = begin
+  target = event.target
+  top = d.ui
+  fn = handler_for(event)
+  while target != top
+    fn(target, event)
+    target = target.parent
+  end
+end
 
 Base.display(d::InlineResult, view::DOM.Node) = begin
   state = d.error ? :error : :ok
@@ -272,16 +302,19 @@ toDOM(ui::SyntaxView) = syntax(ui.expr)
 @abstract struct AbstractExpandable <: LazyNode
   isopen::Bool=false
 end
-children(ui::AbstractExpandable) = (header(ui), convert(UINode, @defer body(ui)))
+@mutable Chevron <: UINode
+toDOM(ui::Chevron) = chevron(ui.parent.parent.isopen)
+children(ui::AbstractExpandable) = (@ui[HStack [Chevron] header(ui)], convert(UINode, @defer body(ui)))
 toDOM(ui::AbstractExpandable) = begin
   @dom[vstack
-    [hstack css"align-items: center" chevron(ui.isopen) ui.firstchild]
+    ui.firstchild
     [vstack style.height=ui.isopen ? "auto" : "0px"
             css"padding: 0 0 3px 20px; overflow: auto; max-height: 500px" ui.isopen ? ui.children[2] : nothing]]
 end
-onmousedown(ui::AbstractExpandable, e::Event) = begin
-  ui.isopen = !ui.isopen
-  redraw(ui)
+onmousedown(ui::Chevron, e::Event) = begin
+  expando = ui.parent.parent
+  expando.isopen = !expando.isopen
+  redraw(expando)
 end
 
 @mutable DeferredNode(promise::Promise) <: UINode
@@ -432,6 +465,13 @@ createUI(s::Symbol) = SyntaxView(s)
 createUI(n::Number) = StaticView(n)
 createUI(p::Pair) = @ui[HStack createUI(p.first) [Padding(0mm,2mm,0mm,2mm) "=>"] createUI(p.second)]
 
+Base.in(needle::UINode, haystack::UINode) = begin
+  for child in haystack.children
+    (child === needle || needle in child) && return true
+  end
+  false
+end
+
 Dict(:a=>1,:b=>Dict(:c=>3))
 (a=1,b=(c=3,),c=3,d=4,e=5,f=6,g=7)
 (a=1,b=(c=3,),d=4)
@@ -443,9 +483,10 @@ AnyDataType
 HStack()
 :a=>1
 "a"
+
 1//3
 1
-@ui[Padding(1mm, 1mm,1mm,1mm) background="white"
+a= @ui[Padding(1mm, 1mm,1mm,1mm) background="white"
                               color="red"
-  [VStack]
+  [VStack [HStack]]
   "Constructors"]
