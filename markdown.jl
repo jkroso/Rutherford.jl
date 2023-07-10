@@ -1,10 +1,8 @@
-@use "github.com" [
-  "JunoLab/Atom.jl" => Atom
-  "stevengj/LaTeXStrings.jl" LaTeXString
-  "jkroso" [
-    "DOM.jl" => DOM @dom @css_str ["html.jl"] ["latex.jl"]
-    "Prospects.jl" flat]]
-import Markdown
+@use "github.com/jkroso/DOM.jl" => DOM @dom @css_str ["html.jl"] ["latex.jl"]
+@use "github.com/jkroso/Prospects.jl" flat
+@use LaTeXStrings: LaTeXString
+@use Markdown
+@use Atom
 
 renderMD(v::Vector) = @dom[:div map(renderMD, v)...]
 renderMD(s::AbstractString) = @dom[:p parse(MIME("text/html"), s)]

@@ -1,17 +1,15 @@
-@use "github.com" [
-  "jkroso" [
-    "DOM.jl" => DOM @dom @css_str [
-      "ansi.jl" ansi
-      "html.jl"]
-    "Prospects.jl" assoc interleave
-    "Destructure.jl" @destruct
-    "Unparse.jl" serialize
-    "DynamicVar.jl" @dynamic!]
-  "JunoLab" [
-    "CodeTools.jl" => CodeTools
-    "Atom.jl" => Atom]]
+@use "github.com/jkroso" [
+  "DOM.jl" => DOM @dom @css_str [
+    "ansi.jl" ansi
+    "html.jl"]
+  "Prospects.jl" assoc interleave
+  "Destructure.jl" @destruct
+  "Unparse.jl" serialize
+  "DynamicVar.jl" @dynamic!]
 @use "." @component Context path data stop intent context
 @use "./markdown" renderMD
+@use CodeTools
+@use Atom
 using InteractiveUtils
 import Markdown
 import Dates
