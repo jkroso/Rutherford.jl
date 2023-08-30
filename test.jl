@@ -1,8 +1,8 @@
 @use "github.com/jkroso/Rutherford.jl" msg current_device @dynamic!
 @use "github.com/jkroso/Rutherford.jl/draw.jl" doodle @dom @css_str hstack vstack
-@use "github.com/jkroso/Prospects.jl" assoc
-@use "github.com/ssfrr/DeepDiffs.jl" deepdiff DeepDiff SimpleDiff
+@use DeepDiffs: deepdiff, DeepDiff, SimpleDiff
 @use "github.com/jkroso/DOM.jl/ansi.jl" ansi
+@use "github.com/jkroso/Prospects.jl" assoc
 
 datasize(value::Number) = begin
   power = max(1, round(Int, value > 0 ? log10(value) : 3) - 2)

@@ -1,12 +1,15 @@
-@use "github.com/jkroso/DOM.jl" => DOM
-@use "github.com" [
-  "MikeInnes/MacroTools.jl" => MacroTools @match
-  "jkroso" [
-    "Prospects.jl" assoc
-    "Destructure.jl" @destruct]
-  "JunoLab/Atom.jl" => Atom
-  "JunoLab/Juno.jl" => Juno]
+@use "github.com/jkroso" [
+  "DOM.jl" => DOM Node Container Primitive @dom @css_str ["Events.jl" => Events]
+  "Prospects.jl" Field assoc push @struct
+    "Destructure.jl" @destruct
+    "Promises.jl" @defer Deferred need pending Promise
+    "DynamicVar.jl" @dynamic!
+    "Unparse.jl" serialize]
+@use "./transactions" apply Change Assoc Dissoc Delete
 @use "./redesign.jl" InlineResult emit Snippet
+@use MacroTools: @match
+@use Atom
+@use Juno
 
 # Hacks to get completion working with Kip modules
 const complete = Atom.handlers["completions"]
