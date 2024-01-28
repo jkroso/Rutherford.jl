@@ -1,6 +1,6 @@
 @use "github.com/jkroso" [
   "DOM.jl" => DOM Node Container Primitive @dom @css_str ["Events.jl" => Events]
-  "Prospects.jl" Field assoc push @struct
+  "Prospects.jl" Field assoc @struct
   "Destructure.jl" @destruct
   "Promises.jl" @defer Deferred need pending Promise
   "DynamicVar.jl" @dynamic!

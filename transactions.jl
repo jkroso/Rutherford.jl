@@ -1,5 +1,5 @@
 @use "github.com/jkroso" [
-  "Prospects.jl" assoc dissoc unshift @struct
+  "Prospects.jl" assoc dissoc prepend @struct
   "DOM.jl" jsonable]
 
 """
@@ -39,7 +39,7 @@ apply(a::Assoc, data) = begin
   assoc(data, a.key, value)
 end
 
-apply(u::Unshift, data) = unshift(data, u.item)
+apply(u::Unshift, data) = prepend(data, u.item)
 apply(s::Swap, data) = s.value
 apply(a::Delete, data) = nothing
 apply(a::Dissoc, data) = dissoc(data, a.key)
