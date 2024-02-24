@@ -50,11 +50,11 @@ Atom.getmodule(s::AbstractString) = begin
   end
 end
 
-const json = MIME("application/json")
+const JSON = MIME"application/json"
 
 msg(x; kwargs...) = msg(x, kwargs)
 # TODO: figure out why I need to buffer the JSON in a String before writing it
-msg(x::String, args...) = Atom.isactive(Atom.sock) && println(Atom.sock, repr(json, Any[x, args...]))
+msg(x::String, args...) = Atom.isactive(Atom.sock) && println(Atom.sock, repr(JSON(), Any[x, args...]))
 
 const done_task = @task nothing
 yield(done_task)
@@ -108,7 +108,7 @@ mutable struct AsyncNode <: Node
   task::Task
 end
 
-Base.show(io::IO, m::MIME"application/json", a::AsyncNode) = show(io, m, convert(Primitive, a))
+Base.show(io::IO, m::JSON, a::AsyncNode) = show(io, m, convert(Primitive, a))
 Base.convert(::Type{Primitive}, a::AsyncNode) =
   if istaskdone(a.task)
     Base.task_result(a.task)
@@ -221,7 +221,7 @@ DOM.diff(a::T, b::T) where T<:Component = begin
 end
 
 Base.convert(::Type{<:DOM.Primitive}, c::Component) = c.view
-Base.show(io::IO, m::MIME, c::Component) = show(io, m, c.view)
+Base.show(io::IO, m::JSON, c::Component) = show(io, m, c.view)
 
 Base.getproperty(c::Component, f::Symbol) = getproperty(c, Field{f}())
 Base.getproperty(c::Component, ::Field{:children}) = c.view.children
