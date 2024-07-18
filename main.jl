@@ -92,7 +92,7 @@ invoke_handler(f::Function, e) = begin
 end
 
 Base.convert(::Type{Node}, p::Promise) = async(p, @dom[:span "Loading..."])
-handle_async_error(e, _, __) = Base.showerror(stderr, e)
+handle_async_error(e, _, __) = Base.showerror(stderr, @show e)
 async(p::Promise, pending::Node; onerror=handle_async_error) = begin
   device = current_device()
   n = AsyncNode(true, pending, @async begin
@@ -398,21 +398,17 @@ schedule_display(ctx::Context) = schedule_display(ctx.parent)
 schedule_display(jr::TopLevelContext) = schedule_display(jr.device)
 schedule_display(d::InlineResult) = begin
   istaskdone(d.display_task) || return
-  d.display_task = @async begin
-    try
-      # if it ends in a semicolon then the user doesn't want to see the result
-      view = if Atom.ends_with_semicolon(d.snippet.text) && d.state == :ok
-        @dom[:span class="icon icon-check"]
-      else
-        @dynamic! let context = TopLevelContext(d), intent = choose_intent(d)
-          Base.invokelatest(draw, intent[], context[], d.data)
-        end
+  d.display_task = errormonitor(@async begin
+    # if it ends in a semicolon then the user doesn't want to see the result
+    view = if Atom.ends_with_semicolon(d.snippet.text) && d.state == :ok
+      @dom[:span class="icon icon-check"]
+    else
+      @dynamic! let context = TopLevelContext(d), intent = choose_intent(d)
+        Base.invokelatest(draw, intent[], context[], d.data)
       end
-      display(d, view)
-    catch e
-      showerror(stderr, e)
     end
-  end
+    display(d, view)
+  end)
   nothing
 end
 

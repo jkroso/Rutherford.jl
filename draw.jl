@@ -1,5 +1,5 @@
 @use "github.com/jkroso" [
-  "DOM.jl" => DOM @dom @css_str [
+  "DOM.jl" => DOM @dom @css_str add_attr [
     "ansi.jl" ansi
     "html.jl"]
   "Prospects.jl" assoc interleave
@@ -509,16 +509,15 @@ doodle(e::Expr) = begin
   html = Atom.@rpc highlight((src=serialize(e), grammar="source.julia", block=true))
   font = Atom.@rpc config("editor.fontFamily")
   dom = parse(MIME("text/html"), html)
-  dom.attrs[:style] = Dict("fontFamily" => font)
-  dom.attrs[:class] = Set([css"""
-                           display: flex
-                           flex-direction: column
-                           background: none
-                           border-radius: 5px
-                           padding: 0.3em
-                           margin: 0
-                           """])
-  dom
+  dom = add_attr(dom, :style, :fontFamily => font)
+  add_attr(dom, :class, css"""
+                        display: flex
+                        flex-direction: column
+                        background: none
+                        border-radius: 5px
+                        padding: 0.3em
+                        margin: 0
+                        """)
 end
 
 doodle(bits::BitVector) = @dom[:span "BitVector[" doodle(length(bits)) "] " map(doodle∘Int, bits)...]

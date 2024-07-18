@@ -1,4 +1,4 @@
-@use "github.com/jkroso/DOM.jl" => DOM @dom @css_str ["html.jl"] ["latex.jl"]
+@use "github.com/jkroso/DOM.jl" => DOM @dom @css_str ["html.jl"] ["latex.jl"] add_attr
 @use "github.com/jkroso/Prospects.jl" flat
 @use LaTeXStrings: LaTeXString
 @use Markdown
@@ -35,15 +35,14 @@ end
 renderMD(c::Markdown.Code) = begin
   html = highlight(c.code, c.language)
   dom = parse(MIME("text/html"), html)
-  dom.attrs[:class] = Set([css"""
-                           display: flex
-                           flex-direction: column
-                           border-radius: 5px
-                           font: 1em SourceCodePro-light
-                           padding: 0.6em
-                           margin: 0
-                           """])
-  dom
+  add_attr(dom, :class, css"""
+                        display: flex
+                        flex-direction: column
+                        border-radius: 5px
+                        font: 1em SourceCodePro-light
+                        padding: 0.6em
+                        margin: 0
+                        """)
 end
 
 renderMD(f::Markdown.Footnote) =
