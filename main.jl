@@ -4,7 +4,7 @@
   "Destructure.jl" @destruct
   "Promises.jl" @defer Deferred need pending Promise
   "DynamicVar.jl" @dynamic!
-  "Unparse.jl" serialize]
+  "Unparse.jl" source]
 @use "./transactions" apply Change Assoc Dissoc Delete
 @use MacroTools: @match
 @use Atom
@@ -473,7 +473,7 @@ transact(::View, ctx::TopLevelContext, change::Change) = display_result(ctx.devi
 transact(::Edit, ctx::TopLevelContext, change::Change) = begin
   @destruct {path, line, id} = ctx.device.snippet
   d = apply(change, data(ctx))
-  src = serialize(d, width=100, mod=Kip.get_module(path))
+  src = source(d, width=100, mod=Kip.get_module(path))
   Atom.@msg edit(src, line, id)
   display_result(ctx.device, d)
 end

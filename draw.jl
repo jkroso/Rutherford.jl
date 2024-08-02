@@ -4,7 +4,7 @@
     "html.jl"]
   "Prospects.jl" assoc interleave
   "Destructure.jl" @destruct
-  "Unparse.jl" serialize
+  "Source.jl" source
   "DynamicVar.jl" @dynamic!]
 @use "." @component Context path data stop intent context
 @use "./markdown" renderMD
@@ -506,7 +506,7 @@ doodle(e::Atom.EvalError) = begin
 end
 
 doodle(e::Expr) = begin
-  html = Atom.@rpc highlight((src=serialize(e), grammar="source.julia", block=true))
+  html = Atom.@rpc highlight((src=source(e), grammar="source.julia", block=true))
   font = Atom.@rpc config("editor.fontFamily")
   dom = parse(MIME("text/html"), html)
   dom = add_attr(dom, :style, :fontFamily => font)
