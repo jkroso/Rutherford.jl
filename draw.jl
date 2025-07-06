@@ -397,6 +397,7 @@ doodle(m::Markdown.MD) =
       border-radius: 3px
       padding: 0px 8px
       background: #f9f9f9
+      color: rgb(35,35,35)
       border: 1px solid #e8e8e8
     h1, h2, h3, h4
       font-weight: 600
