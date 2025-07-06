@@ -292,8 +292,8 @@ doodle(::Type{T}) where T <: Tuple = brief(T)
 doodle(u::Type{Union{}}) = @dom[:span "Union{}"]
 doodle(u::Union) = brief(u)
 
-doodle(e::Enum) = @dom[:span string(nameof(typeof(e))) "::" string(e)]
-doodle(E::Type{<:Enum}) = @dom[:span string(nameof(E)) "::(" join(map(string, instances(E)), ", ") ")"]
+doodle(e::Enum) = @dom[:span repr(e)]
+doodle(E::Type{<:Enum}) = @dom[:span repr(E)]
 
 fields(T) = try fieldnames(T) catch; () end
 
@@ -463,7 +463,7 @@ end
 
 literal(t::NamedTuple) = begin
   items = (@dom[hstack string(k) '=' [DictValue key=k]] for k in keys(t))
-  content = collect(interleave(items, @dom[:span css"padding: 0 6px 0 0" ',']))
+  content = collect(DOM.Node, interleave(items, @dom[:span css"padding: 0 6px 0 0" ',']))
   length(content) == 1 && push!(content, @dom[:span ','])
   @dom[hstack [:span '('] content... [:span ')']]
 end

@@ -4,10 +4,13 @@
 @use Markdown
 @use Atom
 
+flatvec(v::Vector) = flat(v)
+flatvec(x) = [x]
+
 renderMD(v::Vector) = @dom[:div map(renderMD, v)...]
 renderMD(s::AbstractString) = @dom[:p parse(MIME("text/html"), s)]
-renderMD(p::Markdown.Paragraph) = @dom[:p map(renderMDinline, flat(p.content))...]
-renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, flat(b.content))...]
+renderMD(p::Markdown.Paragraph) = @dom[:p map(renderMDinline, flatvec(p.content))...]
+renderMD(b::Markdown.BlockQuote) = @dom[:blockquote map(renderMD, flatvec(b.content))...]
 renderMD(l::Markdown.LaTeX) = @dom[:latex class="latex block" css"""
                                                               display: flex
                                                               align-items: center
@@ -18,7 +21,7 @@ renderMD(l::Markdown.Link) = @dom[:a href=l.url l.text]
 renderMD(::Markdown.HorizontalRule) = @dom[:hr]
 
 renderMD(h::Markdown.Header{l}) where l =
-  DOM.Container{Symbol(:h, l)}(DOM.Attrs(), map(renderMDinline, flat(h.text)))
+  DOM.Container{Symbol(:h, l)}(DOM.Attrs(), map(renderMDinline, flatvec(h.text)))
 
 "highlights using Atoms own highlighter when possible"
 highlight(src, language) = begin

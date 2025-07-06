@@ -14,9 +14,7 @@
 const complete = Atom.handlers["completions"]
 Atom.handle("completions") do data
   mod = Kip.get_module(data["path"], interactive=true)
-  try
-    complete(assoc(data, "mod", mod))
-  catch end
+  complete(assoc(data, "mod", mod))
 end
 const module_handler = Atom.handlers["module"]
 Atom.handle("module") do data
