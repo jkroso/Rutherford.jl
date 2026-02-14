@@ -43,10 +43,35 @@ testset(fn, name) = begin
   ts
 end
 
-handle(t::Test) = begin
-  ts = current_testset[]
-  isnothing(ts) || push!(ts.tests, t)
-  t
+if haskey(ENV, "ATOM_HOME")
+  handle(t::Test) = begin
+    ts = current_testset[]
+    isnothing(ts) || push!(ts.tests, t)
+    t
+  end
+else
+  const RED   = "\x1b[31m"
+  const GREEN = "\x1b[32m"
+  const RESET = "\x1b[0m"
+  passes = 0
+  fails = 0
+  print("\n\n  ")
+  handle(t::Test) = begin
+    if ispass(t)
+      global passes += 1
+      print("$(GREEN).$(RESET)")
+    else
+      global fails += 1
+      print("$(RED).$(RESET)")
+    end
+  end
+  function finish()
+    print("\n\n  ")
+    passes > 0 && print("$GREEN $passes passing")
+    fails > 0 && print("$RED $fails failing")
+    println("\n")
+  end
+  atexit(finish)
 end
 
 @eval macro $(:catch)(expr)
