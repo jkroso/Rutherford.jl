@@ -13,15 +13,12 @@ abstract type Change end
 jsonable(::Change) = false
 
 @struct Merge(data) <: Change
-Merge(;keys...) = Merge(keys)
 @struct Unshift(item) <: Change
 @struct Assoc(key, value) <: Change
 @struct Swap(value) <: Change
 @struct Delete() <: Change
 @struct Identity() <: Change
 @struct Dissoc(key) <: Change
-
-Merge(;kw...) = Merge(Dict(kw...))
 
 """
 apply a change to `x` if `a` isn't a change then it's assumed to be a literal
