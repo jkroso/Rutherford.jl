@@ -29,11 +29,25 @@ highlight(src, language) = begin
     grammer = isempty(language) ? "text.plain" : "source.$language"
     Atom.@rpc highlight((src=src, grammer=grammer, block=true))
   elseif isempty(language)
-    "<pre>$src</pre>"
+    escape_pre(src)
   else
-    read(pipeline(IOBuffer(src), `pygmentize -f html -O "noclasses" -l $language`), String)
+    # Prefer explicit lexer; fall back for GitHub path fences like "51:55:PLC/PLC.ino"
+    for lang in (language, path_lexer(language), "text")
+      try
+        return read(pipeline(IOBuffer(src), `pygmentize -f html -O "noclasses" -l $lang`), String)
+      catch
+      end
+    end
+    escape_pre(src)
   end
 end
+
+path_lexer(language) = begin
+  m = match(r"\.([A-Za-z0-9_+-]+)$", language)
+  m === nothing ? "text" : m.captures[1]
+end
+
+escape_pre(src) = string("<pre>", replace(replace(src, "&"=>"&amp;"), "<"=>"&lt;"), "</pre>")
 
 renderMD(c::Markdown.Code) = begin
   html = highlight(c.code, c.language)
